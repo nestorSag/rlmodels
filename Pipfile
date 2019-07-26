@@ -6,16 +6,6 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-matplotlib = "*"
-seaborn = "*"
-numpy = "*"
-torch = {file = "https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl"}
-gym = "*"
-pandas = "*"
-setuptools = "*"
-wheel = "*"
-twine = "*"
-tqdm = "*"
 
 [requires]
 python_version = "3.6"

@@ -14,8 +14,6 @@ setuptools.setup(
 
      version='1.0',
 
-     scripts=['rlmodels'] ,
-
      author="Nestor Sanchez",
 
      author_email="nestor.sag@gmail.com",
@@ -32,8 +30,6 @@ setuptools.setup(
         'seaborn>=0.9.0',
 
     ],
-    
-    dependency_links = ['https://download.pytorch.org/whl/cpu/torch-1.1.0-cp36-cp36m-linux_x86_64.whl'],
 
      long_description=long_description,
 

@@ -106,9 +106,18 @@ class CMAES(object):
 
     return population
 
+  def _calculate_rank(self,vector):
+    a={}
+    rank=1
+    for num in sorted(vector):
+      if num not in a:
+        a[num]=rank
+        rank=rank+1
+    return[a[i] for i in vector]
+
   """
   Fit the agent
-  @param weight_func: function that maps an individual's ranked performance to recombination weights
+  @param weight_func: function that maps an individual's ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest)
   @param objective reward: stop when mean episodic reward passes this threshold. Defaults to None
   @param n_generations: maximum number of generations to run. Defaults to 100
   @param individuals_by_gen: population size for each generation. Defaults to 20
@@ -118,14 +127,13 @@ class CMAES(object):
   @param alpha_cm: function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)
   @param beta_mu: function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)
   @param beta_cm: function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)
-  @param seed: numpy and environment random seed. Defaults to 1
   @param population: initial population for warm start. Defaults to None
   @param verbose: if true, print mean and max episodic reward each generation. Defaults to True
   @return best-performing agent from last generation
   """
 
   def fit(self,
-      weight_func,
+      weight_func=None,
       objective_reward = None,
       n_generations=100,
       individuals_by_gen=20,
@@ -135,13 +143,20 @@ class CMAES(object):
       alpha_cm= lambda t: 0.5,
       beta_mu= lambda t: 0,
       beta_cm= lambda t: 0,
-      seed=1,
       population=None,
       verbose=True):
 
+    #weight_func defaults to normalised squared ranks
+    if weight_func is None:
+      def weight_func(rewards):
+        w = [r**2 for r in self._calculate_rank(rewards)]
+        s = sum(w)
+        norm_w = [x/s for x in w]
+        return norm_w
+
+
     #reference architecture structure
     architecture = self.architecture
-    np.random.seed(seed)
 
     if population is None:
       self.mean_trace = []
@@ -150,7 +165,6 @@ class CMAES(object):
       population = self._create_population(individuals_by_gen)
       
     # evaluate population
-    self.env.seed(seed)
     i = 0
     objective_reward = np.Inf if objective_reward is None else objective_reward
     best = -np.Inf
@@ -168,11 +182,10 @@ class CMAES(object):
           
           ep_reward = 0 
           
-          #self.env.seed(seed)
           obs = self.env.reset()
           
           for k in range(max_ts_by_episode):
-            action = self.agent.forward(obs).detach().numpy()
+            action = self.agent.forward(obs)
             obs,reward,done,info = self.env.step(action)
             
             ep_reward += reward/max_ts_by_episode #avg intra episode reward
@@ -231,9 +244,9 @@ class CMAES(object):
       df = pd.DataFrame({
         "generation":list(range(len(self.max_trace))) + list(range(len(self.max_trace))),
         "value": self.max_trace + self.mean_trace,
-        "type": ["min" for x in self.max_trace] + ["mean" for x in self.mean_trace]})
+        "trace": ["max" for x in self.max_trace] + ["mean" for x in self.mean_trace]})
 
-      sns.lineplot(data=df,x="generation",y="value",hue="type")
+      sns.lineplot(data=df,x="generation",y="value",hue="trace")
       plt.show()
 
   """
@@ -245,7 +258,7 @@ class CMAES(object):
 
     obs = self.env.reset()
     for k in range(n):
-      action = self.agent.forward(obs).detach.numpy()
+      action = self.agent.forward(obs)
       obs,reward,done,info = self.env.step(action)
       self.env.render()
     self.env.close()
