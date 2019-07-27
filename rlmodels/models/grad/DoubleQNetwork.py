@@ -14,11 +14,12 @@ from collections import deque
 
 
 class SumTree:
-  """
-  provides efficient memory data sctructure (fast retrieves and updates).
-  source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
+  """provides efficient memory data sctructure (fast retrieves and updates).\n
+  source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py\n
+  
+  Parameters:\n
+  capacity (int): number of tree leaves\n
 
-  @param capacity: number of tree leaves
   """
   write = 0
   current_size=0
@@ -55,17 +56,16 @@ class SumTree:
 
   
   def total(self):
-    """
-    returns the sum of leaf weights
+    """returns the sum of leaf weights
     """
     return self.tree[0]
 
   def add(self, p, data):
-    """
-    adds data to tree, potetntially overwritting older data
-
-    @param p: leaf weight
-    @param data: leaf data
+    """adds data to tree, potetntially overwritting older data\n
+  
+    Parameters:\n
+    p (float): leaf weight\n
+    data: leaf data
     """
   
     idx = self.write + self.capacity - 1
@@ -80,11 +80,12 @@ class SumTree:
     self.current_size = min(self.current_size+1,self.capacity)
 
   def update(self, idx, p):
-    """
-    updates leaf weight
+    """updates leaf weight\n
+    
+    Parameters: \n
+    idx (int): leaf index\n
+    p (float): new weight\n
 
-    @param idx: leaf index
-    @param p: new weight
     """
     change = p - self.tree[idx]
 
@@ -92,11 +93,13 @@ class SumTree:
     self._propagate(idx, change)
 
   def get(self, s):
-    """
-    get leaf corresponding to numeric value
+    """get leaf corresponding to numeric value\n
+    
+    Parameters\n
+    s (float): numeric value\n
 
-    @param s: numeric value
-    @return leaf id, tree node id, leaf data
+    Returns:\n
+    leaf id (int), tree node id (int), leaf data\n
     """
 
     idx = self._retrieve(0, s)
@@ -105,14 +108,13 @@ class SumTree:
     return (idx, self.tree[idx], self.data[dataIdx])
 
 class Agent(object):
-
-  """
-  neural network gradient optimisation wrapper
-
-  @param model: Pytorch neural network model 
-  @param optim_: Pytorch optimizer object 
-  @param loss: pytorch loss function
-  @param scheduler_func: Python learning rate scheduler
+  """neural network gradient optimisation wrapper\n
+  
+  Parameters:\n
+  model (nn.Module): Pytorch neural network model \n
+  optim_ (torch.optim): Pytorch optimizer object \n
+  loss: pytorch loss function\n
+  scheduler_func: Python learning rate scheduler\n
   """
 
   
@@ -131,13 +133,13 @@ class Agent(object):
 
 
 class DoubleQNetwork(object):
+  """double Q network with prioritised experienced replay (PER)\n
 
-  """
-  double Q network with prioritised experienced replay (PER)
+  Parameters:\n
+  agent (nn.Module): Pytorch neural network model\n
+  target (nn.Module): Pytorch neural network model of same class as agent\n
+  env: environment object with the same interface as OpenAI gym's environments\n
 
-  @param agent: Pytorch neural network model
-  @param target: Pytorch neural network model of same class as agent
-  @ param env: environment object with the same interface as OpenAI gym's environments
   """
   def __init__(self,agent,target,env):
 
@@ -211,20 +213,36 @@ class DoubleQNetwork(object):
     verbose = True):
 
     """
-    Fit the agent 
+    Fit the agent \n
+    
+    Parameters:\n
 
-    @param n_episodes: number of episodes to run
-    @param max_ts_by_episodes: maximum number of timesteps to run per episode
-    @param batch_size: function that maps a global timestep counter to a batch size. Defaults to 100 (constant)
-    @param exploration_rate_func: function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)
-    @param PER_alpha_func: function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)
-    @param tau: function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)
-    @param learning_rate: SGD learning rate. Defaults to 0.001
-    @param discount_rate: reward discount rate. Defaults to 0.99
-    @param max_memory_size: max memory size for PER. Defaults to 2000
-    @param scheduler_func: function that maps a global timestep counter to a learning rate multiplicative update (for Pytorch LambdaLR scheduler). Defaults to None
-    @param verbose: if true, print mean and max episodic reward each generation. Defaults to True
-    @return updated agent
+    n_episodes (int): number of episodes to run\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode\n
+
+    batch_size (int): function that maps a global timestep counter to a batch size. Defaults to 100 (constant)\n
+
+    exploration_rate_func (int): function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)\n
+
+    PER_alpha_func (int): function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)\n
+
+    tau (int): function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)\n
+
+    learning_rate (float): SGD learning rate. Defaults to 0.001\n
+
+    discount_rate (float): reward discount rate. Defaults to 0.99\n
+
+    max_memory_size (int): max memory size for PER. Defaults to 2000\n
+
+    scheduler_func: function that maps a global timestep counter to a learning rate multiplicative update (for Pytorch LambdaLR scheduler). Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+
+    Returns:\n
+    (nn.Module) updated agent\n
+
     """
 
     if scheduler_func is None:
@@ -320,10 +338,8 @@ class DoubleQNetwork(object):
     return agent.model, target.model
 
   def plot(self):
-    """
-    plot mean reward from last fit call
+    """plot mean and max episodic reward for each generation from last fit call\n
 
-    @return reward time series
     """
 
     if len(self.mean_trace)==0:
@@ -337,11 +353,11 @@ class DoubleQNetwork(object):
     plt.show()
 
   def play(self,n=500):
+    """show agent's animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
 
-    """
-    show agent's animation. Only works for OpenAI environments
-
-    @param n: number of timesteps to visualise. Defaults to 500
     """
     obs = self.env.reset()
     for k in range(n):
@@ -351,10 +367,11 @@ class DoubleQNetwork(object):
     self.env.close()
 
   def forward(self,x):
-    """
-    evaluate input with agent
+    """evaluate input with agent\n
 
-    @param x: input vector
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
     """
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()

@@ -1,0 +1,903 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.6.3" />
+<title>rlmodels.models.es.CMAES API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>rlmodels.models.es.CMAES</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">import random
+import numpy as np
+
+import torch
+import torch.nn as nn
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+
+
+class CMAES(object):
+  &#34;&#34;&#34;correlation matrix adaptive evolutionary strategy algorithm \n
+  
+  Parameters: \n
+  agent (nn.Module): Pytorch neural network model \n
+  env: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method\n
+
+  &#34;&#34;&#34;
+  
+  def __init__(self,agent,env):
+
+    self.agent = agent
+    # reference architecture architecture
+    self.architecture = self.agent.state_dict()
+
+    # get parameter space dimensionality
+    d = 0
+    for layer in self.architecture:
+      d += np.prod(self.architecture[layer].shape)
+    self.d = d
+
+    self.env = env
+    self.last_trace = []
+
+    #initialise mean and covariance matrix
+    self.mu = torch.from_numpy(np.zeros((self.d,1))).float()
+    self.cm = torch.from_numpy(np.eye(self.d)).float()
+
+    #initialise mean and covariance momentum terms
+    self.update_mu = torch.from_numpy(np.zeros((self.d,1))).float()
+    self.update_cm = torch.from_numpy(np.zeros(self.d,self.d)).float()
+
+  def _unroll_params(self,population):
+    # unroll neural architecture weights into a long vector
+    # OUTPUT
+    # matrix whose columns are the population parameter vectors
+    unrolled_matrix = torch.empty(self.d,0)
+    for ind in population:
+      architecture = ind[&#34;architecture&#34;]
+      unrolled = torch.empty(0,1)
+      for layer in architecture:
+        unrolled = torch.cat([unrolled,architecture[layer].view(-1,1)],0)
+      unrolled_matrix = torch.cat([unrolled_matrix,unrolled],1)
+
+    return unrolled_matrix
+
+  def _get_population_statistics(self,population):
+    # OUTPUT
+    # weighted population mean
+    # aggregated rank 1 updates for covariance matrix
+
+    n = len(population)
+    unrolled_matrix = self._unroll_params(population)
+    weights = torch.from_numpy(np.array([ind[&#34;weight&#34;] for ind in population]).reshape(-1,1)).float()
+    
+    # compute weighted mean as a matrix vector product
+    w_mean = torch.mm(unrolled_matrix,weights)
+
+    m_y, n_y = unrolled_matrix.shape
+
+    y = (unrolled_matrix - self.mu)
+
+    r1updates = torch.zeros(m_y,m_y)
+
+    for i in range(n_y):
+      col = y[:,i]
+      r1updates += weights[i]*torch.ger(col,col) 
+
+    return w_mean, r1updates
+
+  def _roll(self,unrolled):
+    # roll a long vector into the agent&#39;s structure
+    architecture = self.architecture
+    rolled = {}
+    s0=0
+    for layer in architecture:
+      if len(architecture[layer].shape) == 2:
+        m,n = architecture[layer].shape
+        rolled[layer] = unrolled[s0:(s0+m*n)].view(m,n)
+      else:
+        m = architecture[layer].shape[0]
+        n = 1
+        rolled[layer] = unrolled[s0:(s0+m*n)].view(m)
+      
+      s0 += m*n
+    return rolled 
+
+  def _create_population(self,n):
+    population = []
+    for i in range(n):
+      eps = np.random.multivariate_normal(self.mu.numpy()[:,0],self.cm.numpy(),1)
+      torch_eps = torch.from_numpy(eps).float().view(self.d,1)
+      ind_architecture = self._roll(torch_eps)
+      population.append({
+          &#34;architecture&#34;:ind_architecture,
+          &#34;avg_episode_r&#34;:0})
+
+    return population
+
+  def _calculate_rank(self,vector):
+    a={}
+    rank=1
+    for num in sorted(vector):
+      if num not in a:
+        a[num]=rank
+        rank=rank+1
+    return[a[i] for i in vector]
+
+  def fit(self,
+      weight_func=None,
+      objective_reward = None,
+      n_generations=100,
+      individuals_by_gen=20,
+      episodes_by_ind=10,
+      max_ts_by_episode=200,
+      alpha_mu= lambda t: 0.99,
+      alpha_cm= lambda t: 0.5,
+      beta_mu= lambda t: 0,
+      beta_cm= lambda t: 0,
+      population=None,
+      verbose=True):
+
+    &#34;&#34;&#34;Fit the agent \n
+  
+    Parameters:\n
+    
+    weight_func (function): function that maps an individual&#39;s ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) \n
+
+    objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None\n
+
+    n_generations (int): maximum number of generations to run. Defaults to 100\n
+
+    individuals_by_gen (int): population size for each generation. Defaults to 20\n
+
+    episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200\n
+
+    alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)\n
+
+    alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)\n
+
+    beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)\n
+
+    beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)\n
+
+    population (list): initial population for warm start. Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+  
+    Returns: \n
+    (nn.Module) best-performing agent from last generation\n
+
+    &#34;&#34;&#34;
+
+    #weight_func defaults to normalised squared ranks
+    if weight_func is None:
+      def weight_func(rewards):
+        w = [r**2 for r in self._calculate_rank(rewards)]
+        s = sum(w)
+        norm_w = [x/s for x in w]
+        return norm_w
+
+
+    #reference architecture structure
+    architecture = self.architecture
+
+    if population is None:
+      self.mean_trace = []
+      self.max_trace = []
+      # fill list with randomly generated individuals from initial parameters
+      population = self._create_population(individuals_by_gen)
+      
+    # evaluate population
+    i = 0
+    objective_reward = np.Inf if objective_reward is None else objective_reward
+    best = -np.Inf
+
+    while i &lt; n_generations and best &lt; objective_reward:
+
+      for l in range(len(population)):
+        # set up nn agent
+        agent = population[l]
+
+        self.agent.load_state_dict(agent[&#34;architecture&#34;])
+
+        #interact with environment
+        for j in range(episodes_by_ind):
+          
+          ep_reward = 0 
+          
+          obs = self.env.reset()
+          
+          for k in range(max_ts_by_episode):
+            action = self.agent.forward(obs)
+            obs,reward,done,info = self.env.step(action)
+            
+            ep_reward += reward/max_ts_by_episode #avg intra episode reward
+
+            if done:
+              break
+
+          population[l][&#34;avg_episode_r&#34;] += ep_reward/episodes_by_ind #avg reward
+
+      # calculate weights for each individual
+      population_rewards = [ind[&#34;avg_episode_r&#34;] for ind in population]
+      ind_weights = weight_func(population_rewards)
+
+      #print(population_rewards)
+      #print(ind_weights)
+
+      for k in range(len(population)):
+        population[k][&#34;weight&#34;] = ind_weights[k]
+
+      #debug info
+      self.mean_trace.append(np.mean(population_rewards))
+      self.max_trace.append(np.max(population_rewards))
+      if verbose:
+        print(&#34;generation {n}, mean trace {x}, max trace {y}&#34;.format(n=i,x=np.mean(population_rewards),y=np.max(population_rewards)))
+
+      w_mean, r1updates = self._get_population_statistics(population)
+
+      self.update_cm = beta_cm(i)*self.update_cm + r1updates - self.cm
+      self.update_mu = beta_mu(i)*self.update_mu + w_mean - self.mu
+
+      self.cm = self.cm + alpha_cm(i)*self.update_cm
+      self.mu = self.mu + alpha_mu(i)*self.update_mu
+
+      #self.cm = (1 - alpha_cm)*self.cm + alpha_cm*r1updates
+      #self.mu = (1 - alpha_mu)*self.mu + alpha_mu*w_mean
+
+      # update agent to the best performing one in current population
+      self.agent.load_state_dict(population[np.argmax(ind_weights)][&#34;architecture&#34;])
+
+      population = self._create_population(individuals_by_gen)
+      i += 1
+      best = np.max(population_rewards) # best avg episodic reward 
+      # update population
+
+    return self.agent
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+    Returns:\n
+    list:reward time series\n
+
+    &#34;&#34;&#34;
+    if len(self.mean_trace)==0:
+      print(&#34;The traces are empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;generation&#34;:list(range(len(self.max_trace))) + list(range(len(self.max_trace))),
+        &#34;value&#34;: self.max_trace + self.mean_trace,
+        &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
+
+      sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      plt.show()
+
+  def play(self,n=200):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
+
+    &#34;&#34;&#34;
+
+    obs = self.env.reset()
+    for k in range(n):
+      action = self.agent.forward(obs)
+      obs,reward,done,info = self.env.step(action)
+      self.env.render()
+    self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent\n
+
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.forward(x)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="rlmodels.models.es.CMAES.CMAES"><code class="flex name class">
+<span>class <span class="ident">CMAES</span></span>
+<span>(</span><span>agent, env)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>correlation matrix adaptive evolutionary strategy algorithm </p>
+<p>Parameters: </p>
+<p>agent (nn.Module): Pytorch neural network model </p>
+<p>env: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class CMAES(object):
+  &#34;&#34;&#34;correlation matrix adaptive evolutionary strategy algorithm \n
+  
+  Parameters: \n
+  agent (nn.Module): Pytorch neural network model \n
+  env: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method\n
+
+  &#34;&#34;&#34;
+  
+  def __init__(self,agent,env):
+
+    self.agent = agent
+    # reference architecture architecture
+    self.architecture = self.agent.state_dict()
+
+    # get parameter space dimensionality
+    d = 0
+    for layer in self.architecture:
+      d += np.prod(self.architecture[layer].shape)
+    self.d = d
+
+    self.env = env
+    self.last_trace = []
+
+    #initialise mean and covariance matrix
+    self.mu = torch.from_numpy(np.zeros((self.d,1))).float()
+    self.cm = torch.from_numpy(np.eye(self.d)).float()
+
+    #initialise mean and covariance momentum terms
+    self.update_mu = torch.from_numpy(np.zeros((self.d,1))).float()
+    self.update_cm = torch.from_numpy(np.zeros(self.d,self.d)).float()
+
+  def _unroll_params(self,population):
+    # unroll neural architecture weights into a long vector
+    # OUTPUT
+    # matrix whose columns are the population parameter vectors
+    unrolled_matrix = torch.empty(self.d,0)
+    for ind in population:
+      architecture = ind[&#34;architecture&#34;]
+      unrolled = torch.empty(0,1)
+      for layer in architecture:
+        unrolled = torch.cat([unrolled,architecture[layer].view(-1,1)],0)
+      unrolled_matrix = torch.cat([unrolled_matrix,unrolled],1)
+
+    return unrolled_matrix
+
+  def _get_population_statistics(self,population):
+    # OUTPUT
+    # weighted population mean
+    # aggregated rank 1 updates for covariance matrix
+
+    n = len(population)
+    unrolled_matrix = self._unroll_params(population)
+    weights = torch.from_numpy(np.array([ind[&#34;weight&#34;] for ind in population]).reshape(-1,1)).float()
+    
+    # compute weighted mean as a matrix vector product
+    w_mean = torch.mm(unrolled_matrix,weights)
+
+    m_y, n_y = unrolled_matrix.shape
+
+    y = (unrolled_matrix - self.mu)
+
+    r1updates = torch.zeros(m_y,m_y)
+
+    for i in range(n_y):
+      col = y[:,i]
+      r1updates += weights[i]*torch.ger(col,col) 
+
+    return w_mean, r1updates
+
+  def _roll(self,unrolled):
+    # roll a long vector into the agent&#39;s structure
+    architecture = self.architecture
+    rolled = {}
+    s0=0
+    for layer in architecture:
+      if len(architecture[layer].shape) == 2:
+        m,n = architecture[layer].shape
+        rolled[layer] = unrolled[s0:(s0+m*n)].view(m,n)
+      else:
+        m = architecture[layer].shape[0]
+        n = 1
+        rolled[layer] = unrolled[s0:(s0+m*n)].view(m)
+      
+      s0 += m*n
+    return rolled 
+
+  def _create_population(self,n):
+    population = []
+    for i in range(n):
+      eps = np.random.multivariate_normal(self.mu.numpy()[:,0],self.cm.numpy(),1)
+      torch_eps = torch.from_numpy(eps).float().view(self.d,1)
+      ind_architecture = self._roll(torch_eps)
+      population.append({
+          &#34;architecture&#34;:ind_architecture,
+          &#34;avg_episode_r&#34;:0})
+
+    return population
+
+  def _calculate_rank(self,vector):
+    a={}
+    rank=1
+    for num in sorted(vector):
+      if num not in a:
+        a[num]=rank
+        rank=rank+1
+    return[a[i] for i in vector]
+
+  def fit(self,
+      weight_func=None,
+      objective_reward = None,
+      n_generations=100,
+      individuals_by_gen=20,
+      episodes_by_ind=10,
+      max_ts_by_episode=200,
+      alpha_mu= lambda t: 0.99,
+      alpha_cm= lambda t: 0.5,
+      beta_mu= lambda t: 0,
+      beta_cm= lambda t: 0,
+      population=None,
+      verbose=True):
+
+    &#34;&#34;&#34;Fit the agent \n
+  
+    Parameters:\n
+    
+    weight_func (function): function that maps an individual&#39;s ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) \n
+
+    objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None\n
+
+    n_generations (int): maximum number of generations to run. Defaults to 100\n
+
+    individuals_by_gen (int): population size for each generation. Defaults to 20\n
+
+    episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200\n
+
+    alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)\n
+
+    alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)\n
+
+    beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)\n
+
+    beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)\n
+
+    population (list): initial population for warm start. Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+  
+    Returns: \n
+    (nn.Module) best-performing agent from last generation\n
+
+    &#34;&#34;&#34;
+
+    #weight_func defaults to normalised squared ranks
+    if weight_func is None:
+      def weight_func(rewards):
+        w = [r**2 for r in self._calculate_rank(rewards)]
+        s = sum(w)
+        norm_w = [x/s for x in w]
+        return norm_w
+
+
+    #reference architecture structure
+    architecture = self.architecture
+
+    if population is None:
+      self.mean_trace = []
+      self.max_trace = []
+      # fill list with randomly generated individuals from initial parameters
+      population = self._create_population(individuals_by_gen)
+      
+    # evaluate population
+    i = 0
+    objective_reward = np.Inf if objective_reward is None else objective_reward
+    best = -np.Inf
+
+    while i &lt; n_generations and best &lt; objective_reward:
+
+      for l in range(len(population)):
+        # set up nn agent
+        agent = population[l]
+
+        self.agent.load_state_dict(agent[&#34;architecture&#34;])
+
+        #interact with environment
+        for j in range(episodes_by_ind):
+          
+          ep_reward = 0 
+          
+          obs = self.env.reset()
+          
+          for k in range(max_ts_by_episode):
+            action = self.agent.forward(obs)
+            obs,reward,done,info = self.env.step(action)
+            
+            ep_reward += reward/max_ts_by_episode #avg intra episode reward
+
+            if done:
+              break
+
+          population[l][&#34;avg_episode_r&#34;] += ep_reward/episodes_by_ind #avg reward
+
+      # calculate weights for each individual
+      population_rewards = [ind[&#34;avg_episode_r&#34;] for ind in population]
+      ind_weights = weight_func(population_rewards)
+
+      #print(population_rewards)
+      #print(ind_weights)
+
+      for k in range(len(population)):
+        population[k][&#34;weight&#34;] = ind_weights[k]
+
+      #debug info
+      self.mean_trace.append(np.mean(population_rewards))
+      self.max_trace.append(np.max(population_rewards))
+      if verbose:
+        print(&#34;generation {n}, mean trace {x}, max trace {y}&#34;.format(n=i,x=np.mean(population_rewards),y=np.max(population_rewards)))
+
+      w_mean, r1updates = self._get_population_statistics(population)
+
+      self.update_cm = beta_cm(i)*self.update_cm + r1updates - self.cm
+      self.update_mu = beta_mu(i)*self.update_mu + w_mean - self.mu
+
+      self.cm = self.cm + alpha_cm(i)*self.update_cm
+      self.mu = self.mu + alpha_mu(i)*self.update_mu
+
+      #self.cm = (1 - alpha_cm)*self.cm + alpha_cm*r1updates
+      #self.mu = (1 - alpha_mu)*self.mu + alpha_mu*w_mean
+
+      # update agent to the best performing one in current population
+      self.agent.load_state_dict(population[np.argmax(ind_weights)][&#34;architecture&#34;])
+
+      population = self._create_population(individuals_by_gen)
+      i += 1
+      best = np.max(population_rewards) # best avg episodic reward 
+      # update population
+
+    return self.agent
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+    Returns:\n
+    list:reward time series\n
+
+    &#34;&#34;&#34;
+    if len(self.mean_trace)==0:
+      print(&#34;The traces are empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;generation&#34;:list(range(len(self.max_trace))) + list(range(len(self.max_trace))),
+        &#34;value&#34;: self.max_trace + self.mean_trace,
+        &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
+
+      sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      plt.show()
+
+  def play(self,n=200):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
+
+    &#34;&#34;&#34;
+
+    obs = self.env.reset()
+    for k in range(n):
+      action = self.agent.forward(obs)
+      obs,reward,done,info = self.env.step(action)
+      self.env.render()
+    self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent\n
+
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.forward(x)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.es.CMAES.CMAES.fit"><code class="name flex">
+<span>def <span class="ident">fit</span></span>(<span>self, weight_func=None, objective_reward=None, n_generations=100, individuals_by_gen=20, episodes_by_ind=10, max_ts_by_episode=200, alpha_mu=<function CMAES.<lambda> at 0x7f885f6f62f0>, alpha_cm=<function CMAES.<lambda> at 0x7f885f6f6378>, beta_mu=<function CMAES.<lambda> at 0x7f885f6f6400>, beta_cm=<function CMAES.<lambda> at 0x7f885f6f6488>, population=None, verbose=True)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Fit the agent </p>
+<h2 id="parameters">Parameters</h2>
+<p>weight_func (function): function that maps an individual's ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) </p>
+<p>objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None</p>
+<p>n_generations (int): maximum number of generations to run. Defaults to 100</p>
+<p>individuals_by_gen (int): population size for each generation. Defaults to 20</p>
+<p>episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10</p>
+<p>max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200</p>
+<p>alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)</p>
+<p>alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)</p>
+<p>beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)</p>
+<p>beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)</p>
+<p>population (list): initial population for warm start. Defaults to None</p>
+<p>verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True</p>
+<dl>
+<dt><strong><code>Returns</code></strong></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>(nn.Module) best-performing agent from last generation</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def fit(self,
+    weight_func=None,
+    objective_reward = None,
+    n_generations=100,
+    individuals_by_gen=20,
+    episodes_by_ind=10,
+    max_ts_by_episode=200,
+    alpha_mu= lambda t: 0.99,
+    alpha_cm= lambda t: 0.5,
+    beta_mu= lambda t: 0,
+    beta_cm= lambda t: 0,
+    population=None,
+    verbose=True):
+
+  &#34;&#34;&#34;Fit the agent \n
+
+  Parameters:\n
+  
+  weight_func (function): function that maps an individual&#39;s ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) \n
+
+  objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None\n
+
+  n_generations (int): maximum number of generations to run. Defaults to 100\n
+
+  individuals_by_gen (int): population size for each generation. Defaults to 20\n
+
+  episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10\n
+
+  max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200\n
+
+  alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)\n
+
+  alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)\n
+
+  beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)\n
+
+  beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)\n
+
+  population (list): initial population for warm start. Defaults to None\n
+
+  verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+
+  Returns: \n
+  (nn.Module) best-performing agent from last generation\n
+
+  &#34;&#34;&#34;
+
+  #weight_func defaults to normalised squared ranks
+  if weight_func is None:
+    def weight_func(rewards):
+      w = [r**2 for r in self._calculate_rank(rewards)]
+      s = sum(w)
+      norm_w = [x/s for x in w]
+      return norm_w
+
+
+  #reference architecture structure
+  architecture = self.architecture
+
+  if population is None:
+    self.mean_trace = []
+    self.max_trace = []
+    # fill list with randomly generated individuals from initial parameters
+    population = self._create_population(individuals_by_gen)
+    
+  # evaluate population
+  i = 0
+  objective_reward = np.Inf if objective_reward is None else objective_reward
+  best = -np.Inf
+
+  while i &lt; n_generations and best &lt; objective_reward:
+
+    for l in range(len(population)):
+      # set up nn agent
+      agent = population[l]
+
+      self.agent.load_state_dict(agent[&#34;architecture&#34;])
+
+      #interact with environment
+      for j in range(episodes_by_ind):
+        
+        ep_reward = 0 
+        
+        obs = self.env.reset()
+        
+        for k in range(max_ts_by_episode):
+          action = self.agent.forward(obs)
+          obs,reward,done,info = self.env.step(action)
+          
+          ep_reward += reward/max_ts_by_episode #avg intra episode reward
+
+          if done:
+            break
+
+        population[l][&#34;avg_episode_r&#34;] += ep_reward/episodes_by_ind #avg reward
+
+    # calculate weights for each individual
+    population_rewards = [ind[&#34;avg_episode_r&#34;] for ind in population]
+    ind_weights = weight_func(population_rewards)
+
+    #print(population_rewards)
+    #print(ind_weights)
+
+    for k in range(len(population)):
+      population[k][&#34;weight&#34;] = ind_weights[k]
+
+    #debug info
+    self.mean_trace.append(np.mean(population_rewards))
+    self.max_trace.append(np.max(population_rewards))
+    if verbose:
+      print(&#34;generation {n}, mean trace {x}, max trace {y}&#34;.format(n=i,x=np.mean(population_rewards),y=np.max(population_rewards)))
+
+    w_mean, r1updates = self._get_population_statistics(population)
+
+    self.update_cm = beta_cm(i)*self.update_cm + r1updates - self.cm
+    self.update_mu = beta_mu(i)*self.update_mu + w_mean - self.mu
+
+    self.cm = self.cm + alpha_cm(i)*self.update_cm
+    self.mu = self.mu + alpha_mu(i)*self.update_mu
+
+    #self.cm = (1 - alpha_cm)*self.cm + alpha_cm*r1updates
+    #self.mu = (1 - alpha_mu)*self.mu + alpha_mu*w_mean
+
+    # update agent to the best performing one in current population
+    self.agent.load_state_dict(population[np.argmax(ind_weights)][&#34;architecture&#34;])
+
+    population = self._create_population(individuals_by_gen)
+    i += 1
+    best = np.max(population_rewards) # best avg episodic reward 
+    # update population
+
+  return self.agent</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.es.CMAES.CMAES.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, x)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>evaluate input with agent</p>
+<p>Parameters:</p>
+<p>x (torch.Tensor): input vector</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def forward(self,x):
+  &#34;&#34;&#34;evaluate input with agent\n
+
+  Parameters:\n
+  x (torch.Tensor): input vector\n
+
+  &#34;&#34;&#34;
+  if isinstance(x,np.ndarray):
+    x = torch.from_numpy(x).float()
+  return self.agent.forward(x)</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.es.CMAES.CMAES.play"><code class="name flex">
+<span>def <span class="ident">play</span></span>(<span>self, n=200)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
+<p>Parameters:</p>
+<p>n (int): number of timesteps to visualise. Defaults to 500</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def play(self,n=200):
+  &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+  
+  Parameters:\n
+  n (int): number of timesteps to visualise. Defaults to 500\n
+
+  &#34;&#34;&#34;
+
+  obs = self.env.reset()
+  for k in range(n):
+    action = self.agent.forward(obs)
+    obs,reward,done,info = self.env.step(action)
+    self.env.render()
+  self.env.close()</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.es.CMAES.CMAES.plot"><code class="name flex">
+<span>def <span class="ident">plot</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>plot mean and max episodic reward for each generation from last fit call</p>
+<p>Returns:</p>
+<p>list:reward time series</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def plot(self):
+  &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+  Returns:\n
+  list:reward time series\n
+
+  &#34;&#34;&#34;
+  if len(self.mean_trace)==0:
+    print(&#34;The traces are empty.&#34;)
+  else:
+    df = pd.DataFrame({
+      &#34;generation&#34;:list(range(len(self.max_trace))) + list(range(len(self.max_trace))),
+      &#34;value&#34;: self.max_trace + self.mean_trace,
+      &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
+
+    sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+    plt.show()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="rlmodels.models.es" href="index.html">rlmodels.models.es</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="rlmodels.models.es.CMAES.CMAES" href="#rlmodels.models.es.CMAES.CMAES">CMAES</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.es.CMAES.CMAES.fit" href="#rlmodels.models.es.CMAES.CMAES.fit">fit</a></code></li>
+<li><code><a title="rlmodels.models.es.CMAES.CMAES.forward" href="#rlmodels.models.es.CMAES.CMAES.forward">forward</a></code></li>
+<li><code><a title="rlmodels.models.es.CMAES.CMAES.play" href="#rlmodels.models.es.CMAES.CMAES.play">play</a></code></li>
+<li><code><a title="rlmodels.models.es.CMAES.CMAES.plot" href="#rlmodels.models.es.CMAES.CMAES.plot">plot</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.6.3</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

@@ -1,0 +1,1240 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.6.3" />
+<title>rlmodels.models.grad.DoubleQNetwork API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>rlmodels.models.grad.DoubleQNetwork</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">import copy
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+import torch
+import torch.autograd as autograd
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+  
+from collections import deque   
+
+
+class SumTree:
+  &#34;&#34;&#34;provides efficient memory data sctructure (fast retrieves and updates).\n
+  source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py\n
+  
+  Parameters:\n
+  capacity (int): number of tree leaves\n
+
+  &#34;&#34;&#34;
+  write = 0
+  current_size=0
+
+  def __init__(self, capacity):
+    # INPUT
+    # capacity: number of tree leaves
+    self.capacity = capacity
+    self.tree = np.zeros( 2*capacity - 1 )
+    self.data = np.zeros( capacity, dtype=object )
+
+  def _propagate(self, idx, change):
+    parent = (idx - 1) // 2
+
+    self.tree[parent] += change
+
+    if parent != 0:
+      self._propagate(parent, change)
+
+  def _retrieve(self, idx, s):
+    left = 2 * idx + 1
+    right = left + 1
+
+    if left &gt;= len(self.tree):
+      return idx
+
+    if s &lt;= self.tree[left]:
+      return self._retrieve(left, s)
+    else:
+      return self._retrieve(right, s-self.tree[left])
+
+  def get_current_size(self):
+    return self.current_size
+
+  
+  def total(self):
+    &#34;&#34;&#34;returns the sum of leaf weights
+    &#34;&#34;&#34;
+    return self.tree[0]
+
+  def add(self, p, data):
+    &#34;&#34;&#34;adds data to tree, potetntially overwritting older data\n
+  
+    Parameters:\n
+    p (float): leaf weight\n
+    data: leaf data
+    &#34;&#34;&#34;
+  
+    idx = self.write + self.capacity - 1
+
+    self.data[self.write] = data
+    self.update(idx, p)
+
+    self.write += 1
+    if self.write &gt;= self.capacity:
+      self.write = 0
+
+    self.current_size = min(self.current_size+1,self.capacity)
+
+  def update(self, idx, p):
+    &#34;&#34;&#34;updates leaf weight\n
+    
+    Parameters: \n
+    idx (int): leaf index\n
+    p (float): new weight\n
+
+    &#34;&#34;&#34;
+    change = p - self.tree[idx]
+
+    self.tree[idx] = p
+    self._propagate(idx, change)
+
+  def get(self, s):
+    &#34;&#34;&#34;get leaf corresponding to numeric value\n
+    
+    Parameters\n
+    s (float): numeric value\n
+
+    Returns:\n
+    leaf id (int), tree node id (int), leaf data\n
+    &#34;&#34;&#34;
+
+    idx = self._retrieve(0, s)
+    dataIdx = idx - self.capacity + 1
+
+    return (idx, self.tree[idx], self.data[dataIdx])
+
+class Agent(object):
+  &#34;&#34;&#34;neural network gradient optimisation wrapper\n
+  
+  Parameters:\n
+  model (nn.Module): Pytorch neural network model \n
+  optim_ (torch.optim): Pytorch optimizer object \n
+  loss: pytorch loss function\n
+  scheduler_func: Python learning rate scheduler\n
+  &#34;&#34;&#34;
+
+  
+  def __init__(self,model,optim_,loss,scheduler_func):
+    self.model = model
+    self.optim = optim_
+    self.loss = loss
+
+    self.optim.zero_grad()
+    self.scheduler = optim.lr_scheduler.LambdaLR(self.optim,lr_lambda=[scheduler_func])
+
+  def forward(self,x):
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.model.forward(x)
+
+
+class DoubleQNetwork(object):
+  &#34;&#34;&#34;double Q network with prioritised experienced replay (PER)\n
+
+  Parameters:\n
+  agent (nn.Module): Pytorch neural network model\n
+  target (nn.Module): Pytorch neural network model of same class as agent\n
+  env: environment object with the same interface as OpenAI gym&#39;s environments\n
+
+  &#34;&#34;&#34;
+  def __init__(self,agent,target,env):
+
+    self.agent = agent
+    self.target = target
+    self.env = env
+
+    self.mean_trace = []
+
+  def _update(self,agent1,agent2,batch,discount_rate):
+    # perform gradient descent on agent1 
+    # delta = PER weights
+    batch_size = len(batch)
+
+    #process batch
+    try:
+      S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
+      A1 = torch.from_numpy(np.array([x[1] for x in batch])).long()
+      R = torch.from_numpy(np.array([x[2] for x in batch])).float()
+      S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
+      T = torch.from_numpy(np.array([x[4] for x in batch])).float()
+
+      _, A2 = torch.max(agent1.forward(S2).detach(),1) #decide with target network
+
+      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).detach().gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with q network
+
+      Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise target network
+    
+    #optimise
+      agent1.loss(Y_hat,Y).backward()
+      agent1.optim.step()
+
+      delta = torch.abs(Y_hat-Y).detach().numpy()
+
+      agent1.optim.zero_grad()
+
+      return delta
+
+    except:
+      print(batch) 
+
+  def _step(self,agent,target,s1,eps):
+    # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
+    q = agent.forward(s1).detach()
+
+    if np.random.binomial(1,eps,1)[0]:
+      a = np.random.randint(low=0,high=list(q.shape)[0],size=1)[0]
+    else:
+      _, a = q.max(0) #argmax
+      a = int(a.numpy())
+
+    sarst = (s1,a) #t = termination
+
+    s2,r,done,info = self.env.step(a)
+    sarst += (r,s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
+
+    return sarst
+
+  def fit(
+    self,
+    n_episodes,
+    max_ts_by_episode,
+    batch_size= lambda t: 100,
+    exploration_rate_func = lambda t: 0.05,
+    PER_alpha_func = lambda t: 1,
+    tau= lambda t: 200,
+    learning_rate = 0.001,
+    discount_rate=0.99,
+    max_memory_size=2000,
+    scheduler_func=None,
+    verbose = True):
+
+    &#34;&#34;&#34;
+    Fit the agent \n
+    
+    Parameters:\n
+
+    n_episodes (int): number of episodes to run\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode\n
+
+    batch_size (int): function that maps a global timestep counter to a batch size. Defaults to 100 (constant)\n
+
+    exploration_rate_func (int): function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)\n
+
+    PER_alpha_func (int): function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)\n
+
+    tau (int): function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)\n
+
+    learning_rate (float): SGD learning rate. Defaults to 0.001\n
+
+    discount_rate (float): reward discount rate. Defaults to 0.99\n
+
+    max_memory_size (int): max memory size for PER. Defaults to 2000\n
+
+    scheduler_func: function that maps a global timestep counter to a learning rate multiplicative update (for Pytorch LambdaLR scheduler). Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+
+    Returns:\n
+    (nn.Module) updated agent\n
+
+    &#34;&#34;&#34;
+
+    if scheduler_func is None:
+        scheduler_func = lambda t: 1
+
+    def weights_init(m):
+      torch.nn.init.xavier_uniform(m.weight.data)
+
+    # initialize agents
+    agent = Agent(
+      model = self.agent,
+      optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+      loss = nn.MSELoss(),
+      scheduler_func = scheduler_func)
+
+    target = Agent(
+      model = self.target,
+      optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+      loss = nn.MSELoss(),
+      scheduler_func = scheduler_func)
+
+    # initialize and fill memory 
+    memory = SumTree(max_memory_size)
+
+    s1 = self.env.reset()
+    for i in range(max_memory_size):
+        
+        sarst = self._step(agent,target,s1,exploration_rate_func(0))
+        memory.add(1,sarst)
+        if sarst[4] == 0:
+                s1 = self.env.reset()
+        else:
+                s1 = sarst[3]
+
+    # fit the agent
+    global_step_counter = 0
+    for i in range(n_episodes):
+          
+      s1 = self.env.reset()
+
+      ts_reward = 0
+      for j in range(max_ts_by_episode):
+
+        #execute epsilon-greedy policy
+        sarst = self._step(agent,target,s1,exploration_rate_func(global_step_counter))
+
+        s1 = sarst[3] #update current state
+
+        r = sarst[2]
+        done = sarst[4] == 0
+        #get batch
+        M = memory.total()
+
+        samples = np.random.uniform(high=M,size=min(batch_size(global_step_counter)-1,memory.get_current_size()))
+        batch = [] #always use latest sample
+        batch_ids = []
+        for u in samples:
+          idx, _ ,data = memory.get(u)
+          batch.append(data) #data from selected leaf
+          batch_ids.append(idx)
+
+        batch += [sarst]
+
+        # update lr
+        agent.scheduler.step()
+        # perform optimisation
+        delta = self._update(agent,target,batch,discount_rate)
+
+        if (global_step_counter % tau(global_step_counter)) == (tau(global_step_counter)-1):
+          target.model.load_state_dict(agent.model.state_dict())
+
+        #update memory
+        sarst = batch.pop() #take out latest sample from batch (it&#39;s not in memory yet)
+        for k in range(len(batch)):
+          memory.update(batch_ids[k],delta[k]**PER_alpha_func(global_step_counter))
+
+        memory.add(delta[-1]**PER_alpha_func(global_step_counter),sarst)
+
+        # trace information
+        ts_reward += r
+
+        global_step_counter += 1
+        if done:
+          break
+
+      self.mean_trace.append(ts_reward/max_ts_by_episode)
+      if verbose:
+        print(&#34;episode {n}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode))
+
+    self.agent = agent.model
+    self.target = target.model
+
+    return agent.model, target.model
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+    &#34;&#34;&#34;
+
+    if len(self.mean_trace)==0:
+      print(&#34;The trace is empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;episode&#34;:list(range(len(self.mean_trace))),
+        &#34;mean reward&#34;: self.mean_trace})
+
+    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+    plt.show()
+
+  def play(self,n=500):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
+
+    &#34;&#34;&#34;
+    obs = self.env.reset()
+    for k in range(n):
+      action = np.argmax(self.agent.forward(obs).detach().numpy())
+      obs,reward,done,info = self.env.step(action)
+      self.env.render()
+    self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent\n
+
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.forward(x)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="rlmodels.models.grad.DoubleQNetwork.Agent"><code class="flex name class">
+<span>class <span class="ident">Agent</span></span>
+<span>(</span><span>model, optim_, loss, scheduler_func)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>neural network gradient optimisation wrapper</p>
+<p>Parameters:</p>
+<p>model (nn.Module): Pytorch neural network model </p>
+<p>optim_ (torch.optim): Pytorch optimizer object </p>
+<p>loss: pytorch loss function</p>
+<p>scheduler_func: Python learning rate scheduler</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class Agent(object):
+  &#34;&#34;&#34;neural network gradient optimisation wrapper\n
+  
+  Parameters:\n
+  model (nn.Module): Pytorch neural network model \n
+  optim_ (torch.optim): Pytorch optimizer object \n
+  loss: pytorch loss function\n
+  scheduler_func: Python learning rate scheduler\n
+  &#34;&#34;&#34;
+
+  
+  def __init__(self,model,optim_,loss,scheduler_func):
+    self.model = model
+    self.optim = optim_
+    self.loss = loss
+
+    self.optim.zero_grad()
+    self.scheduler = optim.lr_scheduler.LambdaLR(self.optim,lr_lambda=[scheduler_func])
+
+  def forward(self,x):
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.model.forward(x)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.grad.DoubleQNetwork.Agent.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, x)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def forward(self,x):
+  if isinstance(x,np.ndarray):
+    x = torch.from_numpy(x).float()
+  return self.model.forward(x)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork"><code class="flex name class">
+<span>class <span class="ident">DoubleQNetwork</span></span>
+<span>(</span><span>agent, target, env)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>double Q network with prioritised experienced replay (PER)</p>
+<p>Parameters:</p>
+<p>agent (nn.Module): Pytorch neural network model</p>
+<p>target (nn.Module): Pytorch neural network model of same class as agent</p>
+<p>env: environment object with the same interface as OpenAI gym's environments</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class DoubleQNetwork(object):
+  &#34;&#34;&#34;double Q network with prioritised experienced replay (PER)\n
+
+  Parameters:\n
+  agent (nn.Module): Pytorch neural network model\n
+  target (nn.Module): Pytorch neural network model of same class as agent\n
+  env: environment object with the same interface as OpenAI gym&#39;s environments\n
+
+  &#34;&#34;&#34;
+  def __init__(self,agent,target,env):
+
+    self.agent = agent
+    self.target = target
+    self.env = env
+
+    self.mean_trace = []
+
+  def _update(self,agent1,agent2,batch,discount_rate):
+    # perform gradient descent on agent1 
+    # delta = PER weights
+    batch_size = len(batch)
+
+    #process batch
+    try:
+      S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
+      A1 = torch.from_numpy(np.array([x[1] for x in batch])).long()
+      R = torch.from_numpy(np.array([x[2] for x in batch])).float()
+      S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
+      T = torch.from_numpy(np.array([x[4] for x in batch])).float()
+
+      _, A2 = torch.max(agent1.forward(S2).detach(),1) #decide with target network
+
+      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).detach().gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with q network
+
+      Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise target network
+    
+    #optimise
+      agent1.loss(Y_hat,Y).backward()
+      agent1.optim.step()
+
+      delta = torch.abs(Y_hat-Y).detach().numpy()
+
+      agent1.optim.zero_grad()
+
+      return delta
+
+    except:
+      print(batch) 
+
+  def _step(self,agent,target,s1,eps):
+    # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
+    q = agent.forward(s1).detach()
+
+    if np.random.binomial(1,eps,1)[0]:
+      a = np.random.randint(low=0,high=list(q.shape)[0],size=1)[0]
+    else:
+      _, a = q.max(0) #argmax
+      a = int(a.numpy())
+
+    sarst = (s1,a) #t = termination
+
+    s2,r,done,info = self.env.step(a)
+    sarst += (r,s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
+
+    return sarst
+
+  def fit(
+    self,
+    n_episodes,
+    max_ts_by_episode,
+    batch_size= lambda t: 100,
+    exploration_rate_func = lambda t: 0.05,
+    PER_alpha_func = lambda t: 1,
+    tau= lambda t: 200,
+    learning_rate = 0.001,
+    discount_rate=0.99,
+    max_memory_size=2000,
+    scheduler_func=None,
+    verbose = True):
+
+    &#34;&#34;&#34;
+    Fit the agent \n
+    
+    Parameters:\n
+
+    n_episodes (int): number of episodes to run\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode\n
+
+    batch_size (int): function that maps a global timestep counter to a batch size. Defaults to 100 (constant)\n
+
+    exploration_rate_func (int): function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)\n
+
+    PER_alpha_func (int): function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)\n
+
+    tau (int): function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)\n
+
+    learning_rate (float): SGD learning rate. Defaults to 0.001\n
+
+    discount_rate (float): reward discount rate. Defaults to 0.99\n
+
+    max_memory_size (int): max memory size for PER. Defaults to 2000\n
+
+    scheduler_func: function that maps a global timestep counter to a learning rate multiplicative update (for Pytorch LambdaLR scheduler). Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+
+    Returns:\n
+    (nn.Module) updated agent\n
+
+    &#34;&#34;&#34;
+
+    if scheduler_func is None:
+        scheduler_func = lambda t: 1
+
+    def weights_init(m):
+      torch.nn.init.xavier_uniform(m.weight.data)
+
+    # initialize agents
+    agent = Agent(
+      model = self.agent,
+      optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+      loss = nn.MSELoss(),
+      scheduler_func = scheduler_func)
+
+    target = Agent(
+      model = self.target,
+      optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+      loss = nn.MSELoss(),
+      scheduler_func = scheduler_func)
+
+    # initialize and fill memory 
+    memory = SumTree(max_memory_size)
+
+    s1 = self.env.reset()
+    for i in range(max_memory_size):
+        
+        sarst = self._step(agent,target,s1,exploration_rate_func(0))
+        memory.add(1,sarst)
+        if sarst[4] == 0:
+                s1 = self.env.reset()
+        else:
+                s1 = sarst[3]
+
+    # fit the agent
+    global_step_counter = 0
+    for i in range(n_episodes):
+          
+      s1 = self.env.reset()
+
+      ts_reward = 0
+      for j in range(max_ts_by_episode):
+
+        #execute epsilon-greedy policy
+        sarst = self._step(agent,target,s1,exploration_rate_func(global_step_counter))
+
+        s1 = sarst[3] #update current state
+
+        r = sarst[2]
+        done = sarst[4] == 0
+        #get batch
+        M = memory.total()
+
+        samples = np.random.uniform(high=M,size=min(batch_size(global_step_counter)-1,memory.get_current_size()))
+        batch = [] #always use latest sample
+        batch_ids = []
+        for u in samples:
+          idx, _ ,data = memory.get(u)
+          batch.append(data) #data from selected leaf
+          batch_ids.append(idx)
+
+        batch += [sarst]
+
+        # update lr
+        agent.scheduler.step()
+        # perform optimisation
+        delta = self._update(agent,target,batch,discount_rate)
+
+        if (global_step_counter % tau(global_step_counter)) == (tau(global_step_counter)-1):
+          target.model.load_state_dict(agent.model.state_dict())
+
+        #update memory
+        sarst = batch.pop() #take out latest sample from batch (it&#39;s not in memory yet)
+        for k in range(len(batch)):
+          memory.update(batch_ids[k],delta[k]**PER_alpha_func(global_step_counter))
+
+        memory.add(delta[-1]**PER_alpha_func(global_step_counter),sarst)
+
+        # trace information
+        ts_reward += r
+
+        global_step_counter += 1
+        if done:
+          break
+
+      self.mean_trace.append(ts_reward/max_ts_by_episode)
+      if verbose:
+        print(&#34;episode {n}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode))
+
+    self.agent = agent.model
+    self.target = target.model
+
+    return agent.model, target.model
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+    &#34;&#34;&#34;
+
+    if len(self.mean_trace)==0:
+      print(&#34;The trace is empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;episode&#34;:list(range(len(self.mean_trace))),
+        &#34;mean reward&#34;: self.mean_trace})
+
+    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+    plt.show()
+
+  def play(self,n=500):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
+
+    &#34;&#34;&#34;
+    obs = self.env.reset()
+    for k in range(n):
+      action = np.argmax(self.agent.forward(obs).detach().numpy())
+      obs,reward,done,info = self.env.step(action)
+      self.env.render()
+    self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent\n
+
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.forward(x)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.fit"><code class="name flex">
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, batch_size=<function DoubleQNetwork.<lambda> at 0x7f885efc5620>, exploration_rate_func=<function DoubleQNetwork.<lambda> at 0x7f885efc56a8>, PER_alpha_func=<function DoubleQNetwork.<lambda> at 0x7f885efc5730>, tau=<function DoubleQNetwork.<lambda> at 0x7f885efc57b8>, learning_rate=0.001, discount_rate=0.99, max_memory_size=2000, scheduler_func=None, verbose=True)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Fit the agent </p>
+<h2 id="parameters">Parameters</h2>
+<p>n_episodes (int): number of episodes to run</p>
+<p>max_ts_by_episodes (int): maximum number of timesteps to run per episode</p>
+<p>batch_size (int): function that maps a global timestep counter to a batch size. Defaults to 100 (constant)</p>
+<p>exploration_rate_func (int): function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)</p>
+<p>PER_alpha_func (int): function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)</p>
+<p>tau (int): function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)</p>
+<p>learning_rate (float): SGD learning rate. Defaults to 0.001</p>
+<p>discount_rate (float): reward discount rate. Defaults to 0.99</p>
+<p>max_memory_size (int): max memory size for PER. Defaults to 2000</p>
+<dl>
+<dt><strong><code>scheduler_func</code></strong> :&ensp;<code>function</code> <code>that</code> <code>maps</code> <code>a</code> <code>global</code> <code>timestep</code> <code>counter</code> <code>to</code> <code>a</code> <code>learning</code> <code>rate</code> <code>multiplicative</code> <code>update</code> (<code>for</code> <code>Pytorch</code> <code>LambdaLR</code> <code>scheduler</code>)<code>.</code> <code>Defaults</code> <code>to</code> <code>None</code></dt>
+<dd>&nbsp;</dd>
+</dl>
+<p>verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True</p>
+<p>Returns:</p>
+<p>(nn.Module) updated agent</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def fit(
+  self,
+  n_episodes,
+  max_ts_by_episode,
+  batch_size= lambda t: 100,
+  exploration_rate_func = lambda t: 0.05,
+  PER_alpha_func = lambda t: 1,
+  tau= lambda t: 200,
+  learning_rate = 0.001,
+  discount_rate=0.99,
+  max_memory_size=2000,
+  scheduler_func=None,
+  verbose = True):
+
+  &#34;&#34;&#34;
+  Fit the agent \n
+  
+  Parameters:\n
+
+  n_episodes (int): number of episodes to run\n
+
+  max_ts_by_episodes (int): maximum number of timesteps to run per episode\n
+
+  batch_size (int): function that maps a global timestep counter to a batch size. Defaults to 100 (constant)\n
+
+  exploration_rate_func (int): function that maps a global timestep counter to an exploration rate. Defaults to 0.05 (constant)\n
+
+  PER_alpha_func (int): function that maps a global timestep counter to a PER alpha parameter. Defaults to 1 (constant)\n
+
+  tau (int): function that maps a golbal timestep counter to a target network hard update time window. Defaults to 200 (constant)\n
+
+  learning_rate (float): SGD learning rate. Defaults to 0.001\n
+
+  discount_rate (float): reward discount rate. Defaults to 0.99\n
+
+  max_memory_size (int): max memory size for PER. Defaults to 2000\n
+
+  scheduler_func: function that maps a global timestep counter to a learning rate multiplicative update (for Pytorch LambdaLR scheduler). Defaults to None\n
+
+  verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+
+  Returns:\n
+  (nn.Module) updated agent\n
+
+  &#34;&#34;&#34;
+
+  if scheduler_func is None:
+      scheduler_func = lambda t: 1
+
+  def weights_init(m):
+    torch.nn.init.xavier_uniform(m.weight.data)
+
+  # initialize agents
+  agent = Agent(
+    model = self.agent,
+    optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+    loss = nn.MSELoss(),
+    scheduler_func = scheduler_func)
+
+  target = Agent(
+    model = self.target,
+    optim_ = optim.SGD(self.agent.parameters(),lr=learning_rate,weight_decay = 0, momentum = 0),
+    loss = nn.MSELoss(),
+    scheduler_func = scheduler_func)
+
+  # initialize and fill memory 
+  memory = SumTree(max_memory_size)
+
+  s1 = self.env.reset()
+  for i in range(max_memory_size):
+      
+      sarst = self._step(agent,target,s1,exploration_rate_func(0))
+      memory.add(1,sarst)
+      if sarst[4] == 0:
+              s1 = self.env.reset()
+      else:
+              s1 = sarst[3]
+
+  # fit the agent
+  global_step_counter = 0
+  for i in range(n_episodes):
+        
+    s1 = self.env.reset()
+
+    ts_reward = 0
+    for j in range(max_ts_by_episode):
+
+      #execute epsilon-greedy policy
+      sarst = self._step(agent,target,s1,exploration_rate_func(global_step_counter))
+
+      s1 = sarst[3] #update current state
+
+      r = sarst[2]
+      done = sarst[4] == 0
+      #get batch
+      M = memory.total()
+
+      samples = np.random.uniform(high=M,size=min(batch_size(global_step_counter)-1,memory.get_current_size()))
+      batch = [] #always use latest sample
+      batch_ids = []
+      for u in samples:
+        idx, _ ,data = memory.get(u)
+        batch.append(data) #data from selected leaf
+        batch_ids.append(idx)
+
+      batch += [sarst]
+
+      # update lr
+      agent.scheduler.step()
+      # perform optimisation
+      delta = self._update(agent,target,batch,discount_rate)
+
+      if (global_step_counter % tau(global_step_counter)) == (tau(global_step_counter)-1):
+        target.model.load_state_dict(agent.model.state_dict())
+
+      #update memory
+      sarst = batch.pop() #take out latest sample from batch (it&#39;s not in memory yet)
+      for k in range(len(batch)):
+        memory.update(batch_ids[k],delta[k]**PER_alpha_func(global_step_counter))
+
+      memory.add(delta[-1]**PER_alpha_func(global_step_counter),sarst)
+
+      # trace information
+      ts_reward += r
+
+      global_step_counter += 1
+      if done:
+        break
+
+    self.mean_trace.append(ts_reward/max_ts_by_episode)
+    if verbose:
+      print(&#34;episode {n}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode))
+
+  self.agent = agent.model
+  self.target = target.model
+
+  return agent.model, target.model</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, x)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>evaluate input with agent</p>
+<p>Parameters:</p>
+<p>x (torch.Tensor): input vector</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def forward(self,x):
+  &#34;&#34;&#34;evaluate input with agent\n
+
+  Parameters:\n
+  x (torch.Tensor): input vector\n
+
+  &#34;&#34;&#34;
+  if isinstance(x,np.ndarray):
+    x = torch.from_numpy(x).float()
+  return self.agent.forward(x)</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.play"><code class="name flex">
+<span>def <span class="ident">play</span></span>(<span>self, n=500)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
+<p>Parameters:</p>
+<p>n (int): number of timesteps to visualise. Defaults to 500</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def play(self,n=500):
+  &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
+  
+  Parameters:\n
+  n (int): number of timesteps to visualise. Defaults to 500\n
+
+  &#34;&#34;&#34;
+  obs = self.env.reset()
+  for k in range(n):
+    action = np.argmax(self.agent.forward(obs).detach().numpy())
+    obs,reward,done,info = self.env.step(action)
+    self.env.render()
+  self.env.close()</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.plot"><code class="name flex">
+<span>def <span class="ident">plot</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>plot mean and max episodic reward for each generation from last fit call</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def plot(self):
+  &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call\n
+
+  &#34;&#34;&#34;
+
+  if len(self.mean_trace)==0:
+    print(&#34;The trace is empty.&#34;)
+  else:
+    df = pd.DataFrame({
+      &#34;episode&#34;:list(range(len(self.mean_trace))),
+      &#34;mean reward&#34;: self.mean_trace})
+
+  sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+  plt.show()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree"><code class="flex name class">
+<span>class <span class="ident">SumTree</span></span>
+<span>(</span><span>capacity)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>provides efficient memory data sctructure (fast retrieves and updates).</p>
+<p>source of the SumTree class code : <a href="https://github.com/jaromiru/AI-blog/blob/master/SumTree.py">https://github.com/jaromiru/AI-blog/blob/master/SumTree.py</a></p>
+<p>Parameters:</p>
+<p>capacity (int): number of tree leaves</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class SumTree:
+  &#34;&#34;&#34;provides efficient memory data sctructure (fast retrieves and updates).\n
+  source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py\n
+  
+  Parameters:\n
+  capacity (int): number of tree leaves\n
+
+  &#34;&#34;&#34;
+  write = 0
+  current_size=0
+
+  def __init__(self, capacity):
+    # INPUT
+    # capacity: number of tree leaves
+    self.capacity = capacity
+    self.tree = np.zeros( 2*capacity - 1 )
+    self.data = np.zeros( capacity, dtype=object )
+
+  def _propagate(self, idx, change):
+    parent = (idx - 1) // 2
+
+    self.tree[parent] += change
+
+    if parent != 0:
+      self._propagate(parent, change)
+
+  def _retrieve(self, idx, s):
+    left = 2 * idx + 1
+    right = left + 1
+
+    if left &gt;= len(self.tree):
+      return idx
+
+    if s &lt;= self.tree[left]:
+      return self._retrieve(left, s)
+    else:
+      return self._retrieve(right, s-self.tree[left])
+
+  def get_current_size(self):
+    return self.current_size
+
+  
+  def total(self):
+    &#34;&#34;&#34;returns the sum of leaf weights
+    &#34;&#34;&#34;
+    return self.tree[0]
+
+  def add(self, p, data):
+    &#34;&#34;&#34;adds data to tree, potetntially overwritting older data\n
+  
+    Parameters:\n
+    p (float): leaf weight\n
+    data: leaf data
+    &#34;&#34;&#34;
+  
+    idx = self.write + self.capacity - 1
+
+    self.data[self.write] = data
+    self.update(idx, p)
+
+    self.write += 1
+    if self.write &gt;= self.capacity:
+      self.write = 0
+
+    self.current_size = min(self.current_size+1,self.capacity)
+
+  def update(self, idx, p):
+    &#34;&#34;&#34;updates leaf weight\n
+    
+    Parameters: \n
+    idx (int): leaf index\n
+    p (float): new weight\n
+
+    &#34;&#34;&#34;
+    change = p - self.tree[idx]
+
+    self.tree[idx] = p
+    self._propagate(idx, change)
+
+  def get(self, s):
+    &#34;&#34;&#34;get leaf corresponding to numeric value\n
+    
+    Parameters\n
+    s (float): numeric value\n
+
+    Returns:\n
+    leaf id (int), tree node id (int), leaf data\n
+    &#34;&#34;&#34;
+
+    idx = self._retrieve(0, s)
+    dataIdx = idx - self.capacity + 1
+
+    return (idx, self.tree[idx], self.data[dataIdx])</code></pre>
+</details>
+<h3>Class variables</h3>
+<dl>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.current_size"><code class="name">var <span class="ident">current_size</span></code></dt>
+<dd>
+<section class="desc"></section>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.write"><code class="name">var <span class="ident">write</span></code></dt>
+<dd>
+<section class="desc"></section>
+</dd>
+</dl>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.add"><code class="name flex">
+<span>def <span class="ident">add</span></span>(<span>self, p, data)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>adds data to tree, potetntially overwritting older data</p>
+<p>Parameters:</p>
+<p>p (float): leaf weight</p>
+<p>data: leaf data</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def add(self, p, data):
+  &#34;&#34;&#34;adds data to tree, potetntially overwritting older data\n
+
+  Parameters:\n
+  p (float): leaf weight\n
+  data: leaf data
+  &#34;&#34;&#34;
+
+  idx = self.write + self.capacity - 1
+
+  self.data[self.write] = data
+  self.update(idx, p)
+
+  self.write += 1
+  if self.write &gt;= self.capacity:
+    self.write = 0
+
+  self.current_size = min(self.current_size+1,self.capacity)</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.get"><code class="name flex">
+<span>def <span class="ident">get</span></span>(<span>self, s)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>get leaf corresponding to numeric value</p>
+<p>Parameters</p>
+<p>s (float): numeric value</p>
+<p>Returns:</p>
+<p>leaf id (int), tree node id (int), leaf data</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def get(self, s):
+  &#34;&#34;&#34;get leaf corresponding to numeric value\n
+  
+  Parameters\n
+  s (float): numeric value\n
+
+  Returns:\n
+  leaf id (int), tree node id (int), leaf data\n
+  &#34;&#34;&#34;
+
+  idx = self._retrieve(0, s)
+  dataIdx = idx - self.capacity + 1
+
+  return (idx, self.tree[idx], self.data[dataIdx])</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.get_current_size"><code class="name flex">
+<span>def <span class="ident">get_current_size</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def get_current_size(self):
+  return self.current_size</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.total"><code class="name flex">
+<span>def <span class="ident">total</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>returns the sum of leaf weights</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def total(self):
+  &#34;&#34;&#34;returns the sum of leaf weights
+  &#34;&#34;&#34;
+  return self.tree[0]</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.grad.DoubleQNetwork.SumTree.update"><code class="name flex">
+<span>def <span class="ident">update</span></span>(<span>self, idx, p)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>updates leaf weight</p>
+<p>Parameters: </p>
+<p>idx (int): leaf index</p>
+<p>p (float): new weight</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def update(self, idx, p):
+  &#34;&#34;&#34;updates leaf weight\n
+  
+  Parameters: \n
+  idx (int): leaf index\n
+  p (float): new weight\n
+
+  &#34;&#34;&#34;
+  change = p - self.tree[idx]
+
+  self.tree[idx] = p
+  self._propagate(idx, change)</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="rlmodels.models.grad" href="index.html">rlmodels.models.grad</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="rlmodels.models.grad.DoubleQNetwork.Agent" href="#rlmodels.models.grad.DoubleQNetwork.Agent">Agent</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.Agent.forward" href="#rlmodels.models.grad.DoubleQNetwork.Agent.forward">forward</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork" href="#rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork">DoubleQNetwork</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.fit" href="#rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.fit">fit</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.forward" href="#rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.forward">forward</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.play" href="#rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.play">play</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.plot" href="#rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.plot">plot</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree" href="#rlmodels.models.grad.DoubleQNetwork.SumTree">SumTree</a></code></h4>
+<ul class="two-column">
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.add" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.add">add</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.current_size" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.current_size">current_size</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.get" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.get">get</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.get_current_size" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.get_current_size">get_current_size</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.total" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.total">total</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.update" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.update">update</a></code></li>
+<li><code><a title="rlmodels.models.grad.DoubleQNetwork.SumTree.write" href="#rlmodels.models.grad.DoubleQNetwork.SumTree.write">write</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.6.3</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>

@@ -10,11 +10,12 @@ import matplotlib.pyplot as plt
 
 
 class CMAES(object):
-  """
-  correlation matrix adaptive evolutionary strategy algorithm
+  """correlation matrix adaptive evolutionary strategy algorithm \n
+  
+  Parameters: \n
+  agent (nn.Module): Pytorch neural network model \n
+  env: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method\n
 
-  @param agent: Pytorch neural network model 
-  @param env: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method
   """
   
   def __init__(self,agent,env):
@@ -130,21 +131,38 @@ class CMAES(object):
       population=None,
       verbose=True):
 
-    """
-    Fit the agent
-    @param weight_func: function that maps an individual's ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest)
-    @param objective reward: stop when mean episodic reward passes this threshold. Defaults to None
-    @param n_generations: maximum number of generations to run. Defaults to 100
-    @param individuals_by_gen: population size for each generation. Defaults to 20
-    @param episodes_by_ind: how many episodes to run for each individual in the population. Defaults to 10
-    @param max_ts_by_episodes: maximum number of timesteps to run per episode. Defaults to 200
-    @param alpha_mu: function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)
-    @param alpha_cm: function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)
-    @param beta_mu: function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)
-    @param beta_cm: function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)
-    @param population: initial population for warm start. Defaults to None
-    @param verbose: if true, print mean and max episodic reward each generation. Defaults to True
-    @return best-performing agent from last generation
+    """Fit the agent \n
+  
+    Parameters:\n
+    
+    weight_func (function): function that maps an individual's ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) \n
+
+    objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None\n
+
+    n_generations (int): maximum number of generations to run. Defaults to 100\n
+
+    individuals_by_gen (int): population size for each generation. Defaults to 20\n
+
+    episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10\n
+
+    max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200\n
+
+    alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)\n
+
+    alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)\n
+
+    beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)\n
+
+    beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)\n
+
+    population (list): initial population for warm start. Defaults to None\n
+
+    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+
+  
+    Returns: \n
+    (nn.Module) best-performing agent from last generation\n
+
     """
 
     #weight_func defaults to normalised squared ranks
@@ -234,10 +252,11 @@ class CMAES(object):
     return self.agent
 
   def plot(self):
-    """
-    plot mean and max episodic reward for each generation from last fit call
+    """plot mean and max episodic reward for each generation from last fit call\n
 
-    @return reward time series
+    Returns:\n
+    list:reward time series\n
+
     """
     if len(self.mean_trace)==0:
       print("The traces are empty.")
@@ -250,11 +269,12 @@ class CMAES(object):
       sns.lineplot(data=df,x="generation",y="value",hue="trace")
       plt.show()
 
-  def play(self,n=500):
-    """
-    show agent's animation. Only works for OpenAI environments
+  def play(self,n=200):
+    """show agent's animation. Only works for OpenAI environments\n
+    
+    Parameters:\n
+    n (int): number of timesteps to visualise. Defaults to 500\n
 
-    @param n: number of timesteps to visualise. Defaults to 500
     """
 
     obs = self.env.reset()
@@ -265,10 +285,11 @@ class CMAES(object):
     self.env.close()
 
   def forward(self,x):
-    """
-    evaluate input with agent
+    """evaluate input with agent\n
 
-    @param x: input vector
+    Parameters:\n
+    x (torch.Tensor): input vector\n
+
     """
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
