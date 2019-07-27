@@ -32,6 +32,10 @@ The following is an example with the popular CartPole environment using a double
 
 ```python
 
+import numpy as np
+import torch
+import torch.optim as optim
+
 from rlmodels.models.grad import DoubleQNetwork
 from rlmodels.nets import VanillaNet
 import gym
@@ -49,8 +53,8 @@ env.seed(1)
 np.random.seed(1)
 torch.manual_seed(1)
 
-agent = VanillaNet([60],4,2,None)
-target = VanillaNet([60],4,2,None)
+agent = VanillaNet(layer_sizes=[60],input_size=4,output_size=2,final_activation=None)
+target = VanillaNet(layer_sizes=[60],input_size=4,output_size=2,final_activation=None)
 
 ddq = DoubleQNetwork(agent,target,env)
 ```
@@ -74,8 +78,8 @@ Almost all arguments receive a function that maps number of elapsed timesteps to
 Once the agent is trained we can visualize the reward trace. If we are using an environment with a render method (like OpenAI ones) we can also visualise the trained agent.
 
 ```python
-ddq.plot()
-ddq.play(n=200)
+ddq.plot() #plot reward traces
+ddq.play(n=200) #observe the agent play
 ```
 
 see the ```example``` folder for an analogous use of CMAES.
@@ -87,7 +91,7 @@ class MyCustomEnv(object):
 	def __init__(self,env):
 		self.env = env
 	def step(self,action):
-		## get next state s, reward, and termination flag (boolean), and any additional info
+		## get next state s, reward, termination flag (boolean) and any additional info
 		return s,r, terminated, info #need to output these 4 things (info can be None)
 	def reset(self):
 		#something
