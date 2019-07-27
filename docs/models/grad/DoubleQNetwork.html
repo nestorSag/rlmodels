@@ -375,11 +375,11 @@ class DoubleQNetwork(object):
     sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
     plt.show()
 
-  def play(self,n=500):
+  def play(self,n=200):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     &#34;&#34;&#34;
     obs = self.env.reset()
@@ -387,6 +387,8 @@ class DoubleQNetwork(object):
       action = np.argmax(self.agent.forward(obs).detach().numpy())
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):
@@ -695,11 +697,11 @@ class DoubleQNetwork(object):
     sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
     plt.show()
 
-  def play(self,n=500):
+  def play(self,n=200):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     &#34;&#34;&#34;
     obs = self.env.reset()
@@ -707,6 +709,8 @@ class DoubleQNetwork(object):
       action = np.argmax(self.agent.forward(obs).detach().numpy())
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):
@@ -723,7 +727,7 @@ class DoubleQNetwork(object):
 <h3>Methods</h3>
 <dl>
 <dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, batch_size=<function DoubleQNetwork.<lambda> at 0x7f79c0c3c620>, exploration_rate_func=<function DoubleQNetwork.<lambda> at 0x7f79c0c3c6a8>, PER_alpha_func=<function DoubleQNetwork.<lambda> at 0x7f79c0c3c730>, tau=<function DoubleQNetwork.<lambda> at 0x7f79c0c3c7b8>, learning_rate=0.001, discount_rate=0.99, max_memory_size=2000, scheduler_func=None, verbose=True)</span>
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, batch_size=<function DoubleQNetwork.<lambda> at 0x7f12ea8c8598>, exploration_rate_func=<function DoubleQNetwork.<lambda> at 0x7f12ea8c8620>, PER_alpha_func=<function DoubleQNetwork.<lambda> at 0x7f12ea8c86a8>, tau=<function DoubleQNetwork.<lambda> at 0x7f12ea8c8730>, learning_rate=0.001, discount_rate=0.99, max_memory_size=2000, scheduler_func=None, verbose=True)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Fit the agent </p>
@@ -907,19 +911,19 @@ class DoubleQNetwork(object):
 </details>
 </dd>
 <dt id="rlmodels.models.grad.DoubleQNetwork.DoubleQNetwork.play"><code class="name flex">
-<span>def <span class="ident">play</span></span>(<span>self, n=500)</span>
+<span>def <span class="ident">play</span></span>(<span>self, n=200)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
 <p>Parameters:</p>
-<p>n (int): number of timesteps to visualise. Defaults to 500</p></section>
+<p>n (int): maximum number of timesteps to visualise. Defaults to 200</p></section>
 <details class="source">
 <summary>Source code</summary>
-<pre><code class="python">def play(self,n=500):
+<pre><code class="python">def play(self,n=200):
   &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
   
   Parameters:\n
-  n (int): number of timesteps to visualise. Defaults to 500\n
+  n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
   &#34;&#34;&#34;
   obs = self.env.reset()
@@ -927,6 +931,8 @@ class DoubleQNetwork(object):
     action = np.argmax(self.agent.forward(obs).detach().numpy())
     obs,reward,done,info = self.env.step(action)
     self.env.render()
+    if done:
+      break
   self.env.close()</code></pre>
 </details>
 </dd>

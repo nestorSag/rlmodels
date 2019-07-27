@@ -297,7 +297,7 @@ class CMAES(object):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     &#34;&#34;&#34;
 
@@ -306,6 +306,8 @@ class CMAES(object):
       action = self.agent.forward(obs)
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):
@@ -604,7 +606,7 @@ class CMAES(object):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     &#34;&#34;&#34;
 
@@ -613,6 +615,8 @@ class CMAES(object):
       action = self.agent.forward(obs)
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):
@@ -629,7 +633,7 @@ class CMAES(object):
 <h3>Methods</h3>
 <dl>
 <dt id="rlmodels.models.es.CMAES.CMAES.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, weight_func=None, objective_reward=None, n_generations=100, individuals_by_gen=20, episodes_by_ind=10, max_ts_by_episode=200, alpha_mu=<function CMAES.<lambda> at 0x7f79c13882f0>, alpha_cm=<function CMAES.<lambda> at 0x7f79c1388378>, beta_mu=<function CMAES.<lambda> at 0x7f79c1388400>, beta_cm=<function CMAES.<lambda> at 0x7f79c1388488>, population=None, verbose=True)</span>
+<span>def <span class="ident">fit</span></span>(<span>self, weight_func=None, objective_reward=None, n_generations=100, individuals_by_gen=20, episodes_by_ind=10, max_ts_by_episode=200, alpha_mu=<function CMAES.<lambda> at 0x7f12eaff72f0>, alpha_cm=<function CMAES.<lambda> at 0x7f12eaff7378>, beta_mu=<function CMAES.<lambda> at 0x7f12eaff7400>, beta_cm=<function CMAES.<lambda> at 0x7f12eaff7488>, population=None, verbose=True)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Fit the agent </p>
@@ -815,14 +819,14 @@ class CMAES(object):
 <dd>
 <section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
 <p>Parameters:</p>
-<p>n (int): number of timesteps to visualise. Defaults to 500</p></section>
+<p>n (int): maximum number of timesteps to visualise. Defaults to 200</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def play(self,n=200):
   &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments\n
   
   Parameters:\n
-  n (int): number of timesteps to visualise. Defaults to 500\n
+  n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
   &#34;&#34;&#34;
 
@@ -831,6 +835,8 @@ class CMAES(object):
     action = self.agent.forward(obs)
     obs,reward,done,info = self.env.step(action)
     self.env.render()
+    if done:
+      break
   self.env.close()</code></pre>
 </details>
 </dd>

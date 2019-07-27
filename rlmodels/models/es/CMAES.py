@@ -273,7 +273,7 @@ class CMAES(object):
     """show agent's animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     """
 
@@ -282,6 +282,8 @@ class CMAES(object):
       action = self.agent.forward(obs)
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):

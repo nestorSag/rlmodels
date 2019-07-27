@@ -351,11 +351,11 @@ class DoubleQNetwork(object):
     sns.lineplot(data=df,x="episode",y="mean reward")
     plt.show()
 
-  def play(self,n=500):
+  def play(self,n=200):
     """show agent's animation. Only works for OpenAI environments\n
     
     Parameters:\n
-    n (int): number of timesteps to visualise. Defaults to 500\n
+    n (int): maximum number of timesteps to visualise. Defaults to 200\n
 
     """
     obs = self.env.reset()
@@ -363,6 +363,8 @@ class DoubleQNetwork(object):
       action = np.argmax(self.agent.forward(obs).detach().numpy())
       obs,reward,done,info = self.env.step(action)
       self.env.render()
+      if done:
+        break
     self.env.close()
 
   def forward(self,x):
