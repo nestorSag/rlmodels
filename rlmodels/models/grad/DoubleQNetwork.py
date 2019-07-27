@@ -248,9 +248,6 @@ class DoubleQNetwork(object):
     if scheduler_func is None:
     	scheduler_func = lambda t: 1
 
-    def weights_init(m):
-      torch.nn.init.xavier_uniform(m.weight.data)
-
     # initialize agents
     agent = Agent(
       model = self.agent,
@@ -290,27 +287,29 @@ class DoubleQNetwork(object):
         sarst = self._step(agent,target,s1,exploration_rate_func(global_step_counter))
 
         s1 = sarst[3] #update current state
+        r = sarst[2]  #get reward
+        done = (sarst[4] == 0) #get termination signal
 
-        r = sarst[2]
-        done = sarst[4] == 0
         #get batch
         M = memory.total()
 
         samples = np.random.uniform(high=M,size=min(batch_size(global_step_counter)-1,memory.get_current_size()))
-        batch = [] #always use latest sample
+        batch = []
         batch_ids = []
         for u in samples:
           idx, _ ,data = memory.get(u)
           batch.append(data) #data from selected leaf
           batch_ids.append(idx)
 
-        batch += [sarst]
+        batch += [sarst] #always use latest sample
 
-        # update lr
+        # update learning rate
         agent.scheduler.step()
+
         # perform optimisation
         delta = self._update(agent,target,batch,discount_rate)
 
+        #target network hard update
         if (global_step_counter % tau(global_step_counter)) == (tau(global_step_counter)-1):
           target.model.load_state_dict(agent.model.state_dict())
 
@@ -319,7 +318,7 @@ class DoubleQNetwork(object):
         for k in range(len(batch)):
           memory.update(batch_ids[k],delta[k]**PER_alpha_func(global_step_counter))
 
-        memory.add(delta[-1]**PER_alpha_func(global_step_counter),sarst)
+        memory.add(delta[k+1]**PER_alpha_func(global_step_counter),sarst)
 
         # trace information
         ts_reward += r

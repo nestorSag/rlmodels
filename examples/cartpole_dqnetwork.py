@@ -1,12 +1,10 @@
 import numpy as np
+import torch
+import torch.optim as optim
+import gym
 
 from rlmodels.models.grad import DoubleQNetwork
 from rlmodels.nets import VanillaNet
-
-import torch
-import torch.optim as optim
-
-import gym
 
 env = gym.make('CartPole-v0')
 
@@ -17,9 +15,7 @@ torch.manual_seed(1)
 agent = VanillaNet([60],4,2,None)
 target = VanillaNet([60],4,2,None)
 
-
 ddq = DoubleQNetwork(agent,target,env)
-
 
 ddq.fit(n_episodes=1000,
 	max_ts_by_episode=200,

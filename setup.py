@@ -47,4 +47,6 @@ setuptools.setup(
 
      ],
 
+     download_url = 'https://github.com/user/reponame/archive/v_01.tar.gz'
+
  )

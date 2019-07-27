@@ -1,12 +1,10 @@
 import numpy as np 
+import torch
+import torch.optim as optim
+import gym
 
 from rlmodels.models.es import CMAES
 from rlmodels.nets import VanillaNet
-
-import torch
-import torch.optim as optim
-
-import gym
 
 env = gym.make('CartPole-v0')
 
@@ -14,20 +12,18 @@ env.seed(1)
 np.random.seed(1)
 torch.manual_seed(1)
 
-# evolutionary strategies dont need to backpropagate, so we can define the output directly (no Q functions!)
-# this custom output gives the action (0 or 1) directly by an argmax functionn
+# agent output is argmax from a 2-dimensional output vector (values not related to Q function!) 
 def binary_output(x):
   return np.argmax(x.detach().numpy())
 
-
 agent = VanillaNet([6,6],4,2,binary_output)
-
 cmaes = CMAES(agent,env)
 
-# we want new samples to be centered at some combination of the best-performing agents
+# in CMAES we want new populations to be centered at some weighted combination of the best-performing agents from the previous population
 # the weight function determines how much each individual agent influences the next sample
+# more weight should be assigned to agents that have higher rewards
 
-## in this example rewards are ranked and maped as rank ==> rank**4/sum(rank**4 for r in ranks)
+## in this example, rewards are ranked and maped as rank ==> rank**4/sum(rank**4 for r in ranks)
 def wf(rewards_list):
   def calculate_rank(vector):
     a={}
