@@ -8,11 +8,13 @@ setuptools.setup(
 
      name='rlmodels',  
 
-     version='1.0.1',
+     version='1.0.3',
 
      author="Nestor Sanchez",
 
      author_email="nestor.sag@gmail.com",
+
+     packages = setuptools.find_namespace_packages(include=['rlmodels.*']),
 
      description="Implementation of some popular reinforcement learning models",
 
@@ -20,10 +22,10 @@ setuptools.setup(
 
      install_requires=[
         'torch>=1.1.0',
-        'numpy>=1.16.4',
-        'pandas>=0.25.0',
-        'matplotlib>=3.1.1',
-        'seaborn>=0.9.0',
+        'numpy',
+        'pandas',
+        'matplotlib',
+        'seaborn',
 
     ],
 
@@ -43,6 +45,6 @@ setuptools.setup(
 
      ],
 
-     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.1.tar.gz'
+     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.3.tar.gz'
 
  )
