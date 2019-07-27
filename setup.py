@@ -4,10 +4,6 @@ with open("README.md", "r") as fh:
 
     long_description = fh.read()
 
-with open('LICENSE') as f:
-    
-    license = f.read()
-
 setuptools.setup(
 
      name='rlmodels',  
@@ -20,7 +16,7 @@ setuptools.setup(
 
      description="Implementation of some popular reinforcement learning models",
 
-     license = license,
+     license = "MIT",
 
      install_requires=[
         'torch>=1.1.0',
@@ -47,6 +43,6 @@ setuptools.setup(
 
      ],
 
-     download_url = 'https://github.com/user/reponame/archive/v_01.tar.gz'
+     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.tar.gz'
 
  )
