@@ -24,7 +24,7 @@ pip install rlmodels
 
 ## Usage
 
-Below is a summary of how the program works. To see the full documentation click [here](https://nestorsag.github.io/streaming-gmm/index.html#package)
+Below is a summary of how the program works. *To see the full documentation click [here](https://nestorsag.github.io/rlmodels/index.html#package)*
 
 ### Initialization
 
