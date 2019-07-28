@@ -65,7 +65,7 @@ ddq_scheduler = DoubleQNetworkScheduler(
 	PER_alpha = lambda t: 1, #constant
 	PER_beta = lambda t: 1, #constant
 	tau = lambda t: 100, #constant
-	learning_rate_update = lambda t: 1.25**(-int(t/1000)), #multiplicative update. decrease step size every 2,500 steps,
+	learning_rate_update = lambda t: 1.25**(-int(t/2500)), #multiplicative update. decrease step size every 2,500 steps,
 	sgd_update = lambda t: 1) #number of steps between sgd updates
 
 ddq = DoubleQNetwork(agent,target,env,ddq_scheduler)
