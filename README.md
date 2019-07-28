@@ -1,4 +1,4 @@
-# rlmodels: Out-of-the-box reinforcement learning
+# rlmodels: a reinforcement learning library
 
 This project is a collection of some popular optimisation algorithms for reinforcement learning problem. At the moment the available models are:
 
@@ -31,14 +31,13 @@ Below is a summary of how the program works. **To see the full documentation cli
 The following is an example with the popular CartPole environment using a double Q network. First the setup
 
 ```python
-
 import numpy as np
 import torch
 import torch.optim as optim
-
-from rlmodels.models.grad import DoubleQNetwork
-from rlmodels.nets import VanillaNet
 import gym
+
+from rlmodels.models.grad import *
+from rlmodels.nets import VanillaNet
 ```
 
 The models are divided in evolutionary strategies (es) and gradient-based ones (grad). The library also has a basic network definition, VanillaNet, to which we only need to specify number and size of hidden layer, input and output sizes, and last activation function. It uses ReLU everywhere else by default.
@@ -46,36 +45,45 @@ The models are divided in evolutionary strategies (es) and gradient-based ones (
 let's create the basic objects 
 
 ```python
-env = gym.make('CartPole-v0')
+# change max episodic ts to 300
+max_ep_ts = 300
 
-##make it reproducible
+env = gym.make('CartPole-v0')
+env._max_episode_steps = max_ep_ts
+
 env.seed(1)
 np.random.seed(1)
 torch.manual_seed(1)
 
-agent = VanillaNet(layer_sizes=[60],input_size=4,output_size=2,final_activation=None)
-target = VanillaNet(layer_sizes=[60],input_size=4,output_size=2,final_activation=None)
+agent = VanillaNet([60],4,2,None)
+target = VanillaNet([60],4,2,None)
 
-ddq = DoubleQNetwork(agent,target,env)
+# set hyperparameter runtime schedule as a function of the global number of timesteps
+ddq_scheduler = DoubleQNetworkScheduler(
+	batch_size = lambda t: 200, #constant
+	exploration_rate = lambda t: max(0.01,0.05 - 0.01*int(t/2500)), #decrease exploration down to 1% after 10,000 steps
+	PER_alpha = lambda t: 1, #constant
+	PER_beta = lambda t: 1, #constant
+	tau = lambda t: 100, #constant
+	learning_rate_update = lambda t: 1.25**(-int(t/1000)), #multiplicative update. decrease step size every 2,500 steps,
+	sgd_update = lambda t: 1) #number of steps between sgd updates
+
+ddq = DoubleQNetwork(agent,target,env,ddq_scheduler)
+
 ```
 
-Now we can fit the agent
+the models take a scheduler object as argument which allows parameters to be changed at runtime accordint to user-defined rules. For example reducing learning rate and exploration rate after a certain number of iterations, as above. Now we can train the model
 
 ```python
-ddq.fit(n_episodes=1000,
-	max_ts_by_episode=200,
-	batch_size=lambda t: 200,
-	exploration_rate_func = lambda t: max(0.01,0.05 - 0.01*int(t/2500)), #decrease exploration down to 1% after 10,000 steps
+ddq.fit(
+	n_episodes=500,
+	max_ts_by_episode=max_ep_ts,
+	initial_learning_rate=1,
 	max_memory_size=2000,
-	learning_rate=0.001,
-	tau=lambda t: 100,
-	scheduler_func=lambda t: 1.25**(-int(t/2500)), #decrease step size a bit every 2,500 steps
 	verbose=True)
 ```
 
-Almost all arguments receive a function that maps number of elapsed timesteps to parameter values, to allow for dynamic tunning, for example to decrease stepsize and exploration rate after a fixed number of steps, as above.
-
-Once the agent is trained we can visualize the reward trace. If we are using an environment with a render method (like OpenAI ones) we can also visualise the trained agent.
+Once the agent is trained we can visualize the reward trace. If we are using an environment with a render method (like OpenAI ones) we can also visualise the trained agent. We can also use the trained model using the ```forward``` method of the ```ddq``` object or simply extract it with ```ddq.agent```
 
 ```python
 ddq.plot() #plot reward traces

@@ -8,17 +8,68 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 
 
+class CMAESScheduler(object):
+  """CMAES hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global generation counter.
+  At each generation it sets the hyperparameter values given by the provided functons
+
+  Parameters:
+  
+  `alpha_mu` (`function`): step size scheduler for the mean parameter 
+
+  `alpha_cm` (`function`): step size scheduler for the covariance matrix parameter
+
+  `beta_mu` (`function`): momentum term for the mean vector parameter
+
+  `beta_cm` (`function`): momentum term for covariance matrix parameter
+
+  """
+  def __init__(
+    self,
+    alpha_mu,
+    alpha_cm,
+    beta_mu,
+    beta_cm):
+
+    self.alpha_mu_f = alpha_mu
+    self.alpha_cm_f = alpha_cm
+    self.beta_mu_f = beta_mu
+    self.beta_cm_f = beta_cm
+
+    self.reset()
+
+  def _step(self):
+
+    self.alpha_mu = self.alpha_mu_f(self.counter)
+    self.alpha_cm = self.alpha_cm_f(self.counter)
+    self.beta_mu = self.beta_mu_f(self.counter)
+    self.beta_cm = self.beta_cm_f(self.counter)
+
+    self.counter += 1
+
+  def reset(self):
+
+    """reset iteration counter
+  
+    """
+    self.counter = 0
+
+    self._step()
+
 
 class CMAES(object):
-  """correlation matrix adaptive evolutionary strategy algorithm \n
+  """correlation matrix adaptive evolutionary strategy algorithm 
   
-  Parameters: \n
-  agent (nn.Module): Pytorch neural network model \n
-  env: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method\n
+  Parameters: 
+
+  `agent` (`torch.nn.Module`): Pytorch neural network model 
+
+  `env`: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method
+
+  `scheduler` (`CMAESScheduler`): scheduler object that controls hyperparameter values at runtime
 
   """
   
-  def __init__(self,agent,env):
+  def __init__(self,agent,env,scheduler):
 
     self.agent = agent
     # reference architecture architecture
@@ -31,7 +82,9 @@ class CMAES(object):
     self.d = d
 
     self.env = env
-    self.last_trace = []
+    self.scheduler = scheduler
+    self.max_trace = []
+    self.mean_trace = []
 
     #initialise mean and covariance matrix
     self.mu = torch.from_numpy(np.zeros((self.d,1))).float()
@@ -109,86 +162,75 @@ class CMAES(object):
     return population
 
   def _calculate_rank(self,vector):
+    # calculate vector ranks from lowest(1) to highest (len(vector))
+
     a={}
     rank=1
     for num in sorted(vector):
       if num not in a:
         a[num]=rank
         rank=rank+1
-    return[a[i] for i in vector]
+    return np.array([a[i] for i in vector])
 
   def fit(self,
       weight_func=None,
-      objective_reward = None,
+      reward_objective = None,
       n_generations=100,
       individuals_by_gen=20,
       episodes_by_ind=10,
       max_ts_by_episode=200,
-      alpha_mu= lambda t: 0.99,
-      alpha_cm= lambda t: 0.5,
-      beta_mu= lambda t: 0,
-      beta_cm= lambda t: 0,
-      population=None,
-      verbose=True):
+      verbose=True,
+      reset=False):
 
-    """Fit the agent \n
+    """Fit the agent 
   
-    Parameters:\n
+    Parameters:
     
-    weight_func (function): function that maps an individual's ranked performance to recombination weights. defaults to normalised squared ranks (lowest to highest) \n
+    `weight_func` (`function`): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on `numpy` arrays; defaults to quadratic function
 
-    objective reward (float): stop when mean episodic reward passes this threshold. Defaults to None\n
+    `objective reward` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
 
-    n_generations (int): maximum number of generations to run. Defaults to 100\n
+    `n_generations` (`int`): maximum number of generations to run. Defaults to 100
 
-    individuals_by_gen (int): population size for each generation. Defaults to 20\n
+    `individuals_by_gen` (`int`): population size for each generation. Defaults to 20
 
-    episodes_by_ind (int): how many episodes to run for each individual in the population. Defaults to 10\n
+    `episodes_by_ind` (`int`): how many episodes to run for each individual in the population. Defaults to 10
 
-    max_ts_by_episodes (int): maximum number of timesteps to run per episode. Defaults to 200\n
+    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode. Defaults to 200
 
-    alpha_mu (float): function that maps generation counts to the step size for the mean vector. Defaults to 0.99 (constant)\n
+    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
 
-    alpha_cm (float): function that maps generation counts to the step size for the covariance matrix. Defaults to 0.5 (constant)\n
-
-    beta_mu (float): function that maps generation counts to momentum coefficients for the step of the mean vector. Defaults to 0 (constant)\n
-
-    beta_cm (float): function that maps generation counts to momentum coefficients for the step of covariance matrix. Defaults to 0 (constant)\n
-
-    population (list): initial population for warm start. Defaults to None\n
-
-    verbose (boolean): if true, print mean and max episodic reward each generation. Defaults to True\n
+    `reset` (`boolean`): reset scheduler counter to zero and performance traces if `fit` has been called before
 
   
-    Returns: \n
-    (nn.Module) best-performing agent from last generation\n
+    Returns: 
+    (`torch nn.Module`) best-performing agent from last generation
 
     """
-
+    if reset:
+      self.scheduler.reset()
+      self.mean_trace = []
+      self.max_trace = []
     #weight_func defaults to normalised squared ranks
+
+    scheduler = self.scheduler
+
     if weight_func is None:
-      def weight_func(rewards):
-        w = [r**2 for r in self._calculate_rank(rewards)]
-        s = sum(w)
-        norm_w = [x/s for x in w]
-        return norm_w
+      def weight_func(ranks):
+        return ranks**2
 
 
     #reference architecture structure
     architecture = self.architecture
 
-    if population is None:
-      self.mean_trace = []
-      self.max_trace = []
-      # fill list with randomly generated individuals from initial parameters
-      population = self._create_population(individuals_by_gen)
+    population = self._create_population(individuals_by_gen)
       
     # evaluate population
     i = 0
-    objective_reward = np.Inf if objective_reward is None else objective_reward
+    reward_objective = np.Inf if reward_objective is None else reward_objective
     best = -np.Inf
 
-    while i < n_generations and best < objective_reward:
+    while i < n_generations and best < reward_objective:
 
       for l in range(len(population)):
         # set up nn agent
@@ -215,14 +257,19 @@ class CMAES(object):
           population[l]["avg_episode_r"] += ep_reward/episodes_by_ind #avg reward
 
       # calculate weights for each individual
-      population_rewards = [ind["avg_episode_r"] for ind in population]
-      ind_weights = weight_func(population_rewards)
+      population_rewards = np.array([ind["avg_episode_r"] for ind in population])
+      weights = weight_func(self._calculate_rank(population_rewards))
+
+      if ((np.argsort(population_rewards) - np.argsort(weights)) != 0).any():
+        print("Warning: recombination weights function does not preserve rank order")
+
+      norm_weights = weights/np.sum(weights)
 
       #print(population_rewards)
-      #print(ind_weights)
+      #print(norm_weights)
 
       for k in range(len(population)):
-        population[k]["weight"] = ind_weights[k]
+        population[k]["weight"] = norm_weights[k]
 
       #debug info
       self.mean_trace.append(np.mean(population_rewards))
@@ -232,30 +279,27 @@ class CMAES(object):
 
       w_mean, r1updates = self._get_population_statistics(population)
 
-      self.update_cm = beta_cm(i)*self.update_cm + r1updates - self.cm
-      self.update_mu = beta_mu(i)*self.update_mu + w_mean - self.mu
+      #update gradient with momentum
+      self.update_cm = scheduler.beta_cm*self.update_cm + r1updates - self.cm
+      self.update_mu = scheduler.beta_mu*self.update_mu + w_mean - self.mu
 
-      self.cm = self.cm + alpha_cm(i)*self.update_cm
-      self.mu = self.mu + alpha_mu(i)*self.update_mu
-
-      #self.cm = (1 - alpha_cm)*self.cm + alpha_cm*r1updates
-      #self.mu = (1 - alpha_mu)*self.mu + alpha_mu*w_mean
+      #update parameters
+      self.cm = self.cm + scheduler.alpha_cm*self.update_cm
+      self.mu = self.mu + scheduler.alpha_mu*self.update_mu
 
       # update agent to the best performing one in current population
-      self.agent.load_state_dict(population[np.argmax(ind_weights)]["architecture"])
+      self.agent.load_state_dict(population[np.argmax(norm_weights)]["architecture"])
 
       population = self._create_population(individuals_by_gen)
       i += 1
       best = np.max(population_rewards) # best avg episodic reward 
-      # update population
+
+      scheduler._step()
 
     return self.agent
 
   def plot(self):
-    """plot mean and max episodic reward for each generation from last fit call\n
-
-    Returns:\n
-    list:reward time series\n
+    """plot mean and max episodic reward for each generation from last fit call
 
     """
     if len(self.mean_trace)==0:
@@ -270,10 +314,11 @@ class CMAES(object):
       plt.show()
 
   def play(self,n=200):
-    """show agent's animation. Only works for OpenAI environments\n
+    """show agent's animation. Only works for OpenAI environments
     
-    Parameters:\n
-    n (int): maximum number of timesteps to visualise. Defaults to 200\n
+    Parameters:
+
+    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
 
     """
 
@@ -287,10 +332,11 @@ class CMAES(object):
     self.env.close()
 
   def forward(self,x):
-    """evaluate input with agent\n
+    """evaluate input with agent
 
-    Parameters:\n
-    x (torch.Tensor): input vector\n
+    Parameters:
+
+    `x` (`torch.Tensor`): input vector
 
     """
     if isinstance(x,np.ndarray):
