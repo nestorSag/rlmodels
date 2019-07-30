@@ -246,7 +246,8 @@ class CMAES(object):
           obs = self.env.reset()
           
           for k in range(max_ts_by_episode):
-            action = self.agent.forward(obs)
+            with torch.no_grad():
+              action = self.agent.forward(obs)
             obs,reward,done,info = self.env.step(action)
             
             ep_reward += reward/max_ts_by_episode #avg intra episode reward
@@ -323,13 +324,14 @@ class CMAES(object):
     """
 
     obs = self.env.reset()
-    for k in range(n):
-      action = self.agent.forward(obs)
-      obs,reward,done,info = self.env.step(action)
-      self.env.render()
-      if done:
-        break
-    self.env.close()
+    with torch.no_grad():
+      for k in range(n):
+        action = self.agent.forward(obs)
+        obs,reward,done,info = self.env.step(action)
+        self.env.render()
+        if done:
+          break
+      self.env.close()
 
   def forward(self,x):
     """evaluate input with agent

@@ -9,139 +9,8 @@ import torch.autograd as autograd
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-  
-from collections import deque   
 
-
-class SumTree:
-  """efficient memory data sctructure class (fast retrieves and updates).
-
-  source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
-  
-  Parameters:
-
-  `capacity` (`int`): number of tree leaves
-
-  """
-  write = 0
-  current_size=0
-
-  def __init__(self, capacity):
-    # INPUT
-    # `capacity`: number of tree leaves
-    self.capacity = capacity
-    self.tree = np.zeros( 2*capacity - 1 )
-    self.data = np.zeros( capacity, dtype=object )
-
-  def _propagate(self, idx, change):
-    parent = (idx - 1) // 2
-
-    self.tree[parent] += change
-
-    if parent != 0:
-      self._propagate(parent, change)
-
-  def _retrieve(self, idx, s):
-    left = 2 * idx + 1
-    right = left + 1
-
-    if left >= len(self.tree):
-      return idx
-
-    if s <= self.tree[left]:
-      return self._retrieve(left, s)
-    else:
-      return self._retrieve(right, s-self.tree[left])
-
-  def get_current_size(self):
-    return self.current_size
-
-  
-  def total(self):
-    """returns the sum of leaf weights
-    """
-    return self.tree[0]
-
-  def add(self, p, data):
-    """adds data to tree, potetntially overwritting older data
-  
-    Parameters:
-    `p` (`float`): leaf weight
-    `data`: leaf data
-    """
-  
-    idx = self.write + self.capacity - 1
-
-    self.data[self.write] = data
-    self.update(idx, p)
-
-    self.write += 1
-    if self.write >= self.capacity:
-      self.write = 0
-
-    self.current_size = min(self.current_size+1,self.capacity)
-
-  def update(self, idx, p):
-    """updates leaf weight
-    
-    Parameters:
-
-    `idx` (`int`): leaf index
-    
-    `p` (`float`): new weight
-
-    """
-    change = p - self.tree[idx]
-
-    self.tree[idx] = p
-    self._propagate(idx, change)
-
-  def get(self, s):
-    """get leaf corresponding to numeric value
-    
-    Parameters
-
-    `s` (`float`): numeric value
-
-    Returns:
-
-    triplet with leaf id (`int`), tree node id (`int`) and  leaf data
-    """
-
-    idx = self._retrieve(0, s)
-    dataIdx = idx - self.capacity + 1
-
-    return (idx, self.tree[idx], self.data[dataIdx])
-
-class Agent(object):
-  """neural network gradient optimisation wrapper
-  
-  Parameters:
-
-  `model` (`torch.nn.Module`): Pytorch neural network model
-
-  `optim_` (`torch.optim`): Pytorch optimizer object 
-
-  `loss` : pytorch loss function
-
-  `scheduler_func`: Python learning rate scheduler
-
-  """
-
-  
-  def __init__(self,model,optim_,loss,scheduler_func):
-    self.model = model
-    self.optim = optim_
-    self.loss = loss
-
-    self.optim.zero_grad()
-    self.scheduler = optim.lr_scheduler.LambdaLR(self.optim,lr_lambda=[scheduler_func])
-
-  def forward(self,x):
-    if isinstance(x,np.ndarray):
-      x = torch.from_numpy(x).float()
-    return self.model.forward(x)
-
+from .grad_utils import *
 
 class DoubleQNetworkScheduler(object):
   """double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
@@ -206,7 +75,7 @@ class DoubleQNetworkScheduler(object):
     self._step()
 
 class DoubleQNetwork(object):
-  """double Q network with importante-sampled prioritised experienced replay (PER)
+  """double Q network with importance-sampled prioritised experienced replay (PER)
 
   Parameters:
 
@@ -219,10 +88,9 @@ class DoubleQNetwork(object):
   `scheduler` (`DoubleQNetworkScheduler`): scheduler object that controls hyperparameter values at runtime
 
   """
-  def __init__(self,agent,target,env,scheduler):
+  def __init__(self,agent,env,scheduler):
 
     self.agent = agent
-    self.target = target
     self.env = env
     self.scheduler = scheduler
     self.mean_trace = []
@@ -241,9 +109,10 @@ class DoubleQNetwork(object):
     S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
-    _, A2 = torch.max(agent1.forward(S2).detach(),1) #decide with q network
+    with torch.no_grad():
+      _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
-    Y = R.view(-1,1) + discount_rate*agent2.forward(S2).detach().gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
+      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
   
@@ -259,7 +128,8 @@ class DoubleQNetwork(object):
 
   def _step(self,agent,target,s1,eps):
     # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
-    q = agent.forward(s1).detach()
+    with torch.no_grad():
+      q = agent.forward(s1)
 
     if np.random.binomial(1,eps,1)[0]:
       a = np.random.randint(low=0,high=list(q.shape)[0],size=1)[0]
@@ -321,7 +191,7 @@ class DoubleQNetwork(object):
       scheduler_func = scheduler.learning_rate_f)
 
     target = Agent(
-      model = self.target,
+      model = copy.deepcopy(self.agent),
       optim_ = optim.SGD(self.agent.parameters(),lr=initial_learning_rate,weight_decay = 0, momentum = 0),
       loss = nn.MSELoss(),
       scheduler_func = scheduler.learning_rate_f)
@@ -433,14 +303,15 @@ class DoubleQNetwork(object):
     `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
 
     """
-    obs = self.env.reset()
-    for k in range(n):
-      action = np.argmax(self.agent.forward(obs).detach().numpy())
-      obs,reward,done,info = self.env.step(action)
-      self.env.render()
-      if done:
-        break
-    self.env.close()
+    with torch.no_grad():
+      obs = self.env.reset()
+      for k in range(n):
+        action = np.argmax(self.agent.forward(obs).numpy())
+        obs,reward,done,info = self.env.step(action)
+        self.env.render()
+        if done:
+          break
+      self.env.close()
 
   def forward(self,x):
     """evaluate input with agent

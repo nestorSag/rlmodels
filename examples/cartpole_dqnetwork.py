@@ -3,10 +3,10 @@ import torch
 import torch.optim as optim
 import gym
 
-from rlmodels.models.grad import *
+from rlmodels.models.DoubleQNetwork import *
 from rlmodels.nets import VanillaNet
 
-max_ep_ts = 300
+max_ep_ts = 200
 
 env = gym.make('CartPole-v0')
 env._max_episode_steps = max_ep_ts
@@ -16,7 +16,6 @@ np.random.seed(1)
 torch.manual_seed(1)
 
 agent = VanillaNet([60],4,2,None)
-target = VanillaNet([60],4,2,None)
 
 # set hyperparameter runtime schedule as a function of the global number of timesteps
 ddq_scheduler = DoubleQNetworkScheduler(
@@ -28,7 +27,7 @@ ddq_scheduler = DoubleQNetworkScheduler(
 	learning_rate_update = lambda t: 1.25**(-int(t/2500)), #decrease step size every 2,500 steps,
 	sgd_update = lambda t: 1) #constant
 
-ddq = DoubleQNetwork(agent,target,env,ddq_scheduler)
+ddq = DoubleQNetwork(agent,env,ddq_scheduler)
 
 ddq.fit(
 	n_episodes=500,
