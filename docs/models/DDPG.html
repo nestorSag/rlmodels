@@ -1,0 +1,1241 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
+<meta name="generator" content="pdoc 0.6.3" />
+<title>rlmodels.models.DDPG API documentation</title>
+<meta name="description" content="" />
+<link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
+<link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/github.min.css" rel="stylesheet">
+<style>.flex{display:flex !important}body{line-height:1.5em}#content{padding:20px}#sidebar{padding:30px;overflow:hidden}.http-server-breadcrumbs{font-size:130%;margin:0 0 15px 0}#footer{font-size:.75em;padding:5px 30px;border-top:1px solid #ddd;text-align:right}#footer p{margin:0 0 0 1em;display:inline-block}#footer p:last-child{margin-right:30px}h1,h2,h3,h4,h5{font-weight:300}h1{font-size:2.5em;line-height:1.1em}h2{font-size:1.75em;margin:1em 0 .50em 0}h3{font-size:1.4em;margin:25px 0 10px 0}h4{margin:0;font-size:105%}a{color:#058;text-decoration:none;transition:color .3s ease-in-out}a:hover{color:#e82}.title code{font-weight:bold}h2[id^="header-"]{margin-top:2em}.ident{color:#900}pre code{background:#f8f8f8;font-size:.8em;line-height:1.4em}code{background:#f2f2f1;padding:1px 4px;overflow-wrap:break-word}h1 code{background:transparent}pre{background:#f8f8f8;border:0;border-top:1px solid #ccc;border-bottom:1px solid #ccc;margin:1em 0;padding:1ex}#http-server-module-list{display:flex;flex-flow:column}#http-server-module-list div{display:flex}#http-server-module-list dt{min-width:10%}#http-server-module-list p{margin-top:0}.toc ul,#index{list-style-type:none;margin:0;padding:0}#index code{background:transparent}#index h3{border-bottom:1px solid #ddd}#index ul{padding:0}#index h4{font-weight:bold}#index h4 + ul{margin-bottom:.6em}@media (min-width:200ex){#index .two-column{column-count:2}}@media (min-width:300ex){#index .two-column{column-count:3}}dl{margin-bottom:2em}dl dl:last-child{margin-bottom:4em}dd{margin:0 0 1em 3em}#header-classes + dl > dd{margin-bottom:3em}dd dd{margin-left:2em}dd p{margin:10px 0}.name{background:#eee;font-weight:bold;font-size:.85em;padding:5px 10px;display:inline-block;min-width:40%}.name:hover{background:#e0e0e0}.name > span:first-child{white-space:nowrap}.name.class > span:nth-child(2){margin-left:.4em}.inherited{color:#999;border-left:5px solid #eee;padding-left:1em}.inheritance em{font-style:normal;font-weight:bold}.desc h2{font-weight:400;font-size:1.25em}.desc h3{font-size:1em}.desc dt code{background:inherit}.source summary{color:#666;text-align:right;font-weight:400;font-size:.8em;text-transform:uppercase;cursor:pointer}.source pre{max-height:500px;overflow:auto;margin:0}.source pre code{font-size:12px;overflow:visible}.hlist{list-style:none}.hlist li{display:inline}.hlist li:after{content:',\2002'}.hlist li:last-child:after{content:none}.hlist .hlist{display:inline;padding-left:1em}img{max-width:100%}.admonition{padding:.1em .5em;margin-bottom:1em}.admonition-title{font-weight:bold}.admonition.note,.admonition.info,.admonition.important{background:#aef}.admonition.todo,.admonition.versionadded,.admonition.tip,.admonition.hint{background:#dfd}.admonition.warning,.admonition.versionchanged,.admonition.deprecated{background:#fd4}.admonition.error,.admonition.danger,.admonition.caution{background:lightpink}</style>
+<style media="screen and (min-width: 700px)">@media screen and (min-width:700px){#sidebar{width:30%}#content{width:70%;max-width:100ch;padding:3em 4em;border-left:1px solid #ddd}pre code{font-size:1em}.item .name{font-size:1em}main{display:flex;flex-direction:row-reverse;justify-content:flex-end}.toc ul ul,#index ul{padding-left:1.5em}.toc > ul > li{margin-top:.5em}}</style>
+<style media="print">@media print{#sidebar h1{page-break-before:always}.source{display:none}}@media print{*{background:transparent !important;color:#000 !important;box-shadow:none !important;text-shadow:none !important}a[href]:after{content:" (" attr(href) ")";font-size:90%}a[href][title]:after{content:none}abbr[title]:after{content:" (" attr(title) ")"}.ir a:after,a[href^="javascript:"]:after,a[href^="#"]:after{content:""}pre,blockquote{border:1px solid #999;page-break-inside:avoid}thead{display:table-header-group}tr,img{page-break-inside:avoid}img{max-width:100% !important}@page{margin:0.5cm}p,h2,h3{orphans:3;widows:3}h1,h2,h3,h4,h5,h6{page-break-after:avoid}}</style>
+</head>
+<body>
+<main>
+<article id="content">
+<header>
+<h1 class="title">Module <code>rlmodels.models.DDPG</code></h1>
+</header>
+<section id="section-intro">
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">import copy
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+
+import torch
+import torch.autograd as autograd
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim as optim
+
+from .grad_utils import *
+
+import logging
+
+class DDPGScheduler(object):
+  &#34;&#34;&#34;DDPG hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
+  At each step it sets the hyperparameter values given by the provided functons
+
+  Parameters:
+  
+  `batch_size_f` (`function`): batch size scheduler function
+
+  `exploration_sdev` (`function`): standard deviation of exploration noise 
+
+  `PER_alpha` (`function`): prioritised experience replay alpha scheduler function
+
+  `PER_beta` (`function`): prioritised experience replay beta scheduler function
+
+  `tau` (`function`): soft target update combination coefficient
+
+  `actor_lr_scheduler_func` (`function`): multiplicative lr update for actor
+
+  `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
+
+  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+
+  &#34;&#34;&#34;
+  def __init__(
+    self,
+    batch_size,
+    exploration_sdev,
+    PER_alpha,
+    PER_beta,
+    tau,
+    actor_lr_scheduler_fn = None,
+    critic_lr_scheduler_fn = None,
+    sgd_update = None):
+
+    self.batch_size_f = batch_size
+    self.exploration_sdev_f = exploration_sdev
+    self.PER_alpha_f = PER_alpha
+    self.tau_f = tau
+    self.critic_lr_scheduler_fn = critic_lr_scheduler_fn
+    self.actor_lr_scheduler_fn = actor_lr_scheduler_fn
+    self.PER_beta_f = PER_beta
+    self.sgd_update_f = sgd_update if sgd_update is None else lambda t: 1
+
+    self.reset()
+
+  def _step(self):
+
+    self.batch_size = self.batch_size_f(self.counter)
+    self.exploration_sdev = self.exploration_sdev_f(self.counter)
+    self.PER_alpha = self.PER_alpha_f(self.counter)
+    self.tau = self.tau_f(self.counter)
+    self.PER_beta = self.PER_beta_f(self.counter)
+    self.sgd_update = self.sgd_update_f(self.counter)
+
+    self.counter += 1
+
+  def reset(self):
+
+    &#34;&#34;&#34;reset iteration counter
+  
+    &#34;&#34;&#34;
+    self.counter = 0
+
+    self._step()
+
+
+class AR1Noise(object):
+  &#34;&#34;&#34;autocrrelated noise process for DDPG exploration
+
+  Parameters:
+
+  `size` (`int`): process sample size
+
+  `seed` (`int`): random seed
+
+  `mu` (`float` or `np.ndarray`): noise mean
+
+  `sigma` (`float` or `np.ndarray`): noise standard deviation
+  &#34;&#34;&#34;
+  #
+  def __init__(self, size, seed, mu=0., sigma=0.2):
+    &#34;&#34;&#34;Initialize parameters and noise process.&#34;&#34;&#34;
+    self.mu = mu * np.ones(size)
+    self.sigma = sigma
+    self.seed = np.random.seed(seed)
+    self.reset()
+  #
+  def reset(self):
+    &#34;&#34;&#34;Reset the internal state (= noise) to mean (mu).&#34;&#34;&#34;
+    self.state = 0
+  #
+  def sample(self):
+    &#34;&#34;&#34;Update internal state and return it as a noise sample.&#34;&#34;&#34;
+    self.state = 0.9*self.state + np.random.normal(self.mu,self.sigma,size=1)
+    return self.state
+
+
+class DDPG(object):
+  &#34;&#34;&#34;deterministic deep policy gradient with importance-sampled prioritised experienced replay (PER)
+
+  Parameters:
+
+  `agent` (`rlmodels.models.Agent`): Pytorch neural network model
+
+  `critic` (`rlmodels.models.Agent`): Pytorch neural network model of same class as agent
+
+  `env`: environment object with the same interface as OpenAI gym&#39;s environments
+
+  `scheduler` (`DDPGScheduler`): scheduler object that controls hyperparameter values at runtime
+
+  &#34;&#34;&#34;
+  def __init__(self,actor,critic,env,scheduler):
+
+    self.actor = actor
+    self.critic = critic
+    self.critic.loss = nn.MSELoss()
+
+    self.env = env
+
+    #get input and output dims
+    self.state_dim = self.env.observation_space.shape[0]
+    self.action_dim = self.env.action_space.shape[0]
+
+    #get action space boundaries
+    self.action_high = torch.from_numpy(env.action_space.high).float()
+    self.action_low = torch.from_numpy(env.action_space.low).float()
+
+    self.noise_process = AR1Noise(size=self.action_dim,seed=1)
+    self.scheduler = scheduler
+    self.mean_trace = []
+
+    if self.scheduler.critic_lr_scheduler_fn is not None:
+      self.critic.scheduler = optim.lr_scheduler.LambdaLR(self.critic.optim,self.scheduler.critic_lr_scheduler_fn)
+
+    if self.scheduler.actor_lr_scheduler_fn is not None:
+      self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
+
+  def _update(
+    self,
+    actor,
+    critic,
+    target_actor,
+    target_critic,
+    batch,
+    discount_rate, 
+    sample_weights):
+    # perform gradient descent on actor and critic 
+
+    # return delta = PER weights. agents are updated in-place
+    batch_size = len(batch)
+
+    sample_weights = (sample_weights**0.5).view(-1,1)
+    #process batch
+    S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
+    A1 = torch.from_numpy(np.array([x[1] for x in batch])).float().view(-1,1)
+    R = torch.from_numpy(np.array([x[2] for x in batch])).float()
+    S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
+    T = torch.from_numpy(np.array([x[4] for x in batch])).float()
+
+    # calculate critic target
+    critic.model.zero_grad()
+    critic.optim.zero_grad()
+    target_critic.model.zero_grad()
+
+    with torch.no_grad():
+      A2 = target_actor.forward(S2).view(-1,1)
+
+      Y = R.view(-1,1) + discount_rate*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
+
+    Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
+
+    delta = torch.abs(Y_hat-Y).detach().numpy()
+    #optimise critic
+    critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+    critic.optim.step()
+
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        improvement = np.mean(delta) - np.mean(delta2)
+      logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+
+    # optimise actor
+    actor.model.zero_grad()
+    target_actor.model.zero_grad()
+
+    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+    q.backward()
+    actor.optim.step()
+
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
+
+    delta = torch.abs(Y_hat-Y).detach().numpy()
+    return delta
+
+  def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
+    # perform an action given actor, critic and their targets, the current state, and an epsilon (exploration probability)
+    self.noise_process.sigma = exploration_sdev
+    with torch.no_grad():
+      #eps = torch.from_numpy(np.random.normal(0,exploration_sdev,self.action_dim)).float()
+      eps = torch.from_numpy(self.noise_process.sample()).float()
+      a = actor.forward(s1) + eps
+      a = torch.min(torch.max(a,self.action_low),self.action_high) #clip action
+
+    sarst = (s1,a) #t = termination
+
+    s2,r,done,info = self.env.step(a)
+    if render:
+      self.env.render()
+    sarst += (float(r),s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
+
+    return sarst
+
+  def fit(
+    self,
+    n_episodes,
+    max_ts_by_episode,
+    discount_rate=0.99,
+    max_memory_size=2000,
+    verbose = True,
+    reset=False,
+    render=False):
+
+    &#34;&#34;&#34;
+    Fit the agent 
+    
+    Parameters:
+
+    `n_episodes` (`int`): number of episodes to run
+
+    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
+
+    `discount_rate` (`float`): reward discount rate. Defaults to 0.99
+
+    `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
+
+    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+
+    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+
+    `render` (`boolean`): render environment while fitting
+
+    Returns:
+    (`nn.Module`) updated agent
+
+    &#34;&#34;&#34;
+
+    if reset:
+      self.scheduler.reset()
+      self.trace = []
+      self.critic.scheduler = optim.scheduler.LambdaLR(self.critic.opt,self.scheduler.critic_lr_scheduler_fn)
+      self.actor.scheduler = optim.scheduler.LambdaLR(self.actor.opt,self.scheduler.actor_lr_scheduler_fn)
+
+    scheduler = self.scheduler
+    actor = self.actor
+    critic = self.critic
+
+    # initialize target networks
+    target_actor = copy.deepcopy(actor)
+
+    target_critic = copy.deepcopy(critic)
+
+    # initialize and fill memory 
+    memory = SumTree(max_memory_size)
+
+    s1 = self.env.reset()
+    for i in range(max_memory_size):
+      
+      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
+      #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
+      memory.add(1,sarst)
+      if sarst[4] == 0:
+        s1 = self.env.reset()
+      else:
+        s1 = sarst[3]
+
+    # fit agents
+    for i in range(n_episodes):
+          
+      s1 = self.env.reset()
+
+      ts_reward = 0
+      for j in range(max_ts_by_episode):
+
+        #execute epsilon-greedy policy
+        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
+        s1 = sarst[3] #update current state
+        r = sarst[2]  #get reward
+        done = (sarst[4] == 0) #get termination signal
+
+        #add to memory
+        #print(&#34;train sarst: {s}&#34;.format(s=sarst))
+        memory.add(1,sarst) #default initial weight of 1
+
+        # sgd update
+        if scheduler.counter % scheduler.sgd_update ==0:
+          # get replay batch
+          P = memory.total()
+          N = memory.get_current_size()
+
+          samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+          batch = []
+          batch_ids = []
+          batch_p = []
+          for u in samples:
+            idx, p ,data = memory.get(u)
+            #print(&#34;mem data sarst {s}&#34;.format(s=sarst))
+            batch.append(data) #data from selected leaf
+            batch_ids.append(idx)
+            batch_p.append(p/P)
+
+          #compute importance sampling weights
+          batch_w = np.array(batch_p)
+          batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
+          batch_w /= np.max(batch_w)
+          batch_w = torch.from_numpy(batch_w).float()
+
+          # perform optimisation
+          delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+
+          #update memory
+          #print(np.mean(delta))
+          for k in range(len(delta)):
+            memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
+
+        #target network soft update
+        tau = scheduler.tau
+        for layer in actor.model._modules:
+          target_actor.model._modules[layer].weight.data = (1-tau)*target_actor.model._modules[layer].weight.data + tau*actor.model._modules[layer].weight.data
+
+        for layer in critic.model._modules:
+          target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
+
+    
+        # trace information
+        ts_reward += r
+
+        # update learning rate and other hyperparameters
+        actor.step()
+        critic.step()
+        scheduler._step()
+
+        if done:
+          self.noise_process.reset()
+          break
+
+      self.mean_trace.append(ts_reward/max_ts_by_episode)
+      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+
+    self.actor = actor
+    self.critic = critic
+
+    if render:
+      self.env.close()
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean episodic reward from last `fit` call
+
+    &#34;&#34;&#34;
+
+    if len(self.mean_trace)==0:
+      print(&#34;The trace is empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;episode&#34;:list(range(len(self.mean_trace))),
+        &#34;mean reward&#34;: self.mean_trace})
+
+    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+    plt.show()
+
+  def play(self,n=200):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
+    
+    Parameters:
+
+    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+
+    &#34;&#34;&#34;
+    with torch.no_grad():
+      obs = self.env.reset()
+      for k in range(n):
+        action = self.actor.model.forward(obs)
+        action = torch.min(torch.max(action,self.action_low),self.action_high) #clip action
+        obs,reward,done,info = self.env.step(action)
+        self.env.render()
+        if done:
+          break
+      self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent
+
+    Parameters:
+
+    `x` (`torch.Tensor`): input vector
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.model.forward(x)</code></pre>
+</details>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
+<dl>
+<dt id="rlmodels.models.DDPG.AR1Noise"><code class="flex name class">
+<span>class <span class="ident">AR1Noise</span></span>
+<span>(</span><span>size, seed, mu=0.0, sigma=0.2)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>autocrrelated noise process for DDPG exploration</p>
+<p>Parameters:</p>
+<p><code>size</code> (<code>int</code>): process sample size</p>
+<p><code>seed</code> (<code>int</code>): random seed</p>
+<p><code>mu</code> (<code>float</code> or <code>np.ndarray</code>): noise mean</p>
+<p><code>sigma</code> (<code>float</code> or <code>np.ndarray</code>): noise standard deviation</p>
+<p>Initialize parameters and noise process.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class AR1Noise(object):
+  &#34;&#34;&#34;autocrrelated noise process for DDPG exploration
+
+  Parameters:
+
+  `size` (`int`): process sample size
+
+  `seed` (`int`): random seed
+
+  `mu` (`float` or `np.ndarray`): noise mean
+
+  `sigma` (`float` or `np.ndarray`): noise standard deviation
+  &#34;&#34;&#34;
+  #
+  def __init__(self, size, seed, mu=0., sigma=0.2):
+    &#34;&#34;&#34;Initialize parameters and noise process.&#34;&#34;&#34;
+    self.mu = mu * np.ones(size)
+    self.sigma = sigma
+    self.seed = np.random.seed(seed)
+    self.reset()
+  #
+  def reset(self):
+    &#34;&#34;&#34;Reset the internal state (= noise) to mean (mu).&#34;&#34;&#34;
+    self.state = 0
+  #
+  def sample(self):
+    &#34;&#34;&#34;Update internal state and return it as a noise sample.&#34;&#34;&#34;
+    self.state = 0.9*self.state + np.random.normal(self.mu,self.sigma,size=1)
+    return self.state</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.DDPG.AR1Noise.reset"><code class="name flex">
+<span>def <span class="ident">reset</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Reset the internal state (= noise) to mean (mu).</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def reset(self):
+  &#34;&#34;&#34;Reset the internal state (= noise) to mean (mu).&#34;&#34;&#34;
+  self.state = 0</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.DDPG.AR1Noise.sample"><code class="name flex">
+<span>def <span class="ident">sample</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Update internal state and return it as a noise sample.</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def sample(self):
+  &#34;&#34;&#34;Update internal state and return it as a noise sample.&#34;&#34;&#34;
+  self.state = 0.9*self.state + np.random.normal(self.mu,self.sigma,size=1)
+  return self.state</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="rlmodels.models.DDPG.DDPG"><code class="flex name class">
+<span>class <span class="ident">DDPG</span></span>
+<span>(</span><span>actor, critic, env, scheduler)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>deterministic deep policy gradient with importance-sampled prioritised experienced replay (PER)</p>
+<p>Parameters:</p>
+<p><code>agent</code> (<code>rlmodels.models.Agent</code>): Pytorch neural network model</p>
+<p><code>critic</code> (<code>rlmodels.models.Agent</code>): Pytorch neural network model of same class as agent</p>
+<p><code>env</code>: environment object with the same interface as OpenAI gym's environments</p>
+<p><code>scheduler</code> (<a title="rlmodels.models.DDPG.DDPGScheduler" href="#rlmodels.models.DDPG.DDPGScheduler"><code>DDPGScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class DDPG(object):
+  &#34;&#34;&#34;deterministic deep policy gradient with importance-sampled prioritised experienced replay (PER)
+
+  Parameters:
+
+  `agent` (`rlmodels.models.Agent`): Pytorch neural network model
+
+  `critic` (`rlmodels.models.Agent`): Pytorch neural network model of same class as agent
+
+  `env`: environment object with the same interface as OpenAI gym&#39;s environments
+
+  `scheduler` (`DDPGScheduler`): scheduler object that controls hyperparameter values at runtime
+
+  &#34;&#34;&#34;
+  def __init__(self,actor,critic,env,scheduler):
+
+    self.actor = actor
+    self.critic = critic
+    self.critic.loss = nn.MSELoss()
+
+    self.env = env
+
+    #get input and output dims
+    self.state_dim = self.env.observation_space.shape[0]
+    self.action_dim = self.env.action_space.shape[0]
+
+    #get action space boundaries
+    self.action_high = torch.from_numpy(env.action_space.high).float()
+    self.action_low = torch.from_numpy(env.action_space.low).float()
+
+    self.noise_process = AR1Noise(size=self.action_dim,seed=1)
+    self.scheduler = scheduler
+    self.mean_trace = []
+
+    if self.scheduler.critic_lr_scheduler_fn is not None:
+      self.critic.scheduler = optim.lr_scheduler.LambdaLR(self.critic.optim,self.scheduler.critic_lr_scheduler_fn)
+
+    if self.scheduler.actor_lr_scheduler_fn is not None:
+      self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
+
+  def _update(
+    self,
+    actor,
+    critic,
+    target_actor,
+    target_critic,
+    batch,
+    discount_rate, 
+    sample_weights):
+    # perform gradient descent on actor and critic 
+
+    # return delta = PER weights. agents are updated in-place
+    batch_size = len(batch)
+
+    sample_weights = (sample_weights**0.5).view(-1,1)
+    #process batch
+    S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
+    A1 = torch.from_numpy(np.array([x[1] for x in batch])).float().view(-1,1)
+    R = torch.from_numpy(np.array([x[2] for x in batch])).float()
+    S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
+    T = torch.from_numpy(np.array([x[4] for x in batch])).float()
+
+    # calculate critic target
+    critic.model.zero_grad()
+    critic.optim.zero_grad()
+    target_critic.model.zero_grad()
+
+    with torch.no_grad():
+      A2 = target_actor.forward(S2).view(-1,1)
+
+      Y = R.view(-1,1) + discount_rate*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
+
+    Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
+
+    delta = torch.abs(Y_hat-Y).detach().numpy()
+    #optimise critic
+    critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+    critic.optim.step()
+
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        improvement = np.mean(delta) - np.mean(delta2)
+      logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+
+    # optimise actor
+    actor.model.zero_grad()
+    target_actor.model.zero_grad()
+
+    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+    q.backward()
+    actor.optim.step()
+
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
+
+    delta = torch.abs(Y_hat-Y).detach().numpy()
+    return delta
+
+  def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
+    # perform an action given actor, critic and their targets, the current state, and an epsilon (exploration probability)
+    self.noise_process.sigma = exploration_sdev
+    with torch.no_grad():
+      #eps = torch.from_numpy(np.random.normal(0,exploration_sdev,self.action_dim)).float()
+      eps = torch.from_numpy(self.noise_process.sample()).float()
+      a = actor.forward(s1) + eps
+      a = torch.min(torch.max(a,self.action_low),self.action_high) #clip action
+
+    sarst = (s1,a) #t = termination
+
+    s2,r,done,info = self.env.step(a)
+    if render:
+      self.env.render()
+    sarst += (float(r),s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
+
+    return sarst
+
+  def fit(
+    self,
+    n_episodes,
+    max_ts_by_episode,
+    discount_rate=0.99,
+    max_memory_size=2000,
+    verbose = True,
+    reset=False,
+    render=False):
+
+    &#34;&#34;&#34;
+    Fit the agent 
+    
+    Parameters:
+
+    `n_episodes` (`int`): number of episodes to run
+
+    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
+
+    `discount_rate` (`float`): reward discount rate. Defaults to 0.99
+
+    `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
+
+    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+
+    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+
+    `render` (`boolean`): render environment while fitting
+
+    Returns:
+    (`nn.Module`) updated agent
+
+    &#34;&#34;&#34;
+
+    if reset:
+      self.scheduler.reset()
+      self.trace = []
+      self.critic.scheduler = optim.scheduler.LambdaLR(self.critic.opt,self.scheduler.critic_lr_scheduler_fn)
+      self.actor.scheduler = optim.scheduler.LambdaLR(self.actor.opt,self.scheduler.actor_lr_scheduler_fn)
+
+    scheduler = self.scheduler
+    actor = self.actor
+    critic = self.critic
+
+    # initialize target networks
+    target_actor = copy.deepcopy(actor)
+
+    target_critic = copy.deepcopy(critic)
+
+    # initialize and fill memory 
+    memory = SumTree(max_memory_size)
+
+    s1 = self.env.reset()
+    for i in range(max_memory_size):
+      
+      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
+      #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
+      memory.add(1,sarst)
+      if sarst[4] == 0:
+        s1 = self.env.reset()
+      else:
+        s1 = sarst[3]
+
+    # fit agents
+    for i in range(n_episodes):
+          
+      s1 = self.env.reset()
+
+      ts_reward = 0
+      for j in range(max_ts_by_episode):
+
+        #execute epsilon-greedy policy
+        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
+        s1 = sarst[3] #update current state
+        r = sarst[2]  #get reward
+        done = (sarst[4] == 0) #get termination signal
+
+        #add to memory
+        #print(&#34;train sarst: {s}&#34;.format(s=sarst))
+        memory.add(1,sarst) #default initial weight of 1
+
+        # sgd update
+        if scheduler.counter % scheduler.sgd_update ==0:
+          # get replay batch
+          P = memory.total()
+          N = memory.get_current_size()
+
+          samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+          batch = []
+          batch_ids = []
+          batch_p = []
+          for u in samples:
+            idx, p ,data = memory.get(u)
+            #print(&#34;mem data sarst {s}&#34;.format(s=sarst))
+            batch.append(data) #data from selected leaf
+            batch_ids.append(idx)
+            batch_p.append(p/P)
+
+          #compute importance sampling weights
+          batch_w = np.array(batch_p)
+          batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
+          batch_w /= np.max(batch_w)
+          batch_w = torch.from_numpy(batch_w).float()
+
+          # perform optimisation
+          delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+
+          #update memory
+          #print(np.mean(delta))
+          for k in range(len(delta)):
+            memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
+
+        #target network soft update
+        tau = scheduler.tau
+        for layer in actor.model._modules:
+          target_actor.model._modules[layer].weight.data = (1-tau)*target_actor.model._modules[layer].weight.data + tau*actor.model._modules[layer].weight.data
+
+        for layer in critic.model._modules:
+          target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
+
+    
+        # trace information
+        ts_reward += r
+
+        # update learning rate and other hyperparameters
+        actor.step()
+        critic.step()
+        scheduler._step()
+
+        if done:
+          self.noise_process.reset()
+          break
+
+      self.mean_trace.append(ts_reward/max_ts_by_episode)
+      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+
+    self.actor = actor
+    self.critic = critic
+
+    if render:
+      self.env.close()
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean episodic reward from last `fit` call
+
+    &#34;&#34;&#34;
+
+    if len(self.mean_trace)==0:
+      print(&#34;The trace is empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;episode&#34;:list(range(len(self.mean_trace))),
+        &#34;mean reward&#34;: self.mean_trace})
+
+    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+    plt.show()
+
+  def play(self,n=200):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
+    
+    Parameters:
+
+    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+
+    &#34;&#34;&#34;
+    with torch.no_grad():
+      obs = self.env.reset()
+      for k in range(n):
+        action = self.actor.model.forward(obs)
+        action = torch.min(torch.max(action,self.action_low),self.action_high) #clip action
+        obs,reward,done,info = self.env.step(action)
+        self.env.render()
+        if done:
+          break
+      self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent
+
+    Parameters:
+
+    `x` (`torch.Tensor`): input vector
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.model.forward(x)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.DDPG.DDPG.fit"><code class="name flex">
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, verbose=True, reset=False, render=False)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Fit the agent </p>
+<p>Parameters:</p>
+<p><code>n_episodes</code> (<code>int</code>): number of episodes to run</p>
+<p><code>max_ts_by_episodes</code> (<code>int</code>): maximum number of timesteps to run per episode</p>
+<p><code>discount_rate</code> (<code>float</code>): reward discount rate. Defaults to 0.99</p>
+<p><code>max_memory_size</code> (<code>int</code>): max memory size for PER. Defaults to 2000</p>
+<p><code>verbose</code> (<code>boolean</code>): if true, print mean and max episodic reward each generation. Defaults to True</p>
+<p><code>reset_scheduler</code> (<code>boolean</code>): reset trace and scheduler time counter to zero if fit has been called before</p>
+<p><code>render</code> (<code>boolean</code>): render environment while fitting</p>
+<p>Returns:
+(<code>nn.Module</code>) updated agent</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def fit(
+  self,
+  n_episodes,
+  max_ts_by_episode,
+  discount_rate=0.99,
+  max_memory_size=2000,
+  verbose = True,
+  reset=False,
+  render=False):
+
+  &#34;&#34;&#34;
+  Fit the agent 
+  
+  Parameters:
+
+  `n_episodes` (`int`): number of episodes to run
+
+  `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
+
+  `discount_rate` (`float`): reward discount rate. Defaults to 0.99
+
+  `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
+
+  `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+
+  `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+
+  `render` (`boolean`): render environment while fitting
+
+  Returns:
+  (`nn.Module`) updated agent
+
+  &#34;&#34;&#34;
+
+  if reset:
+    self.scheduler.reset()
+    self.trace = []
+    self.critic.scheduler = optim.scheduler.LambdaLR(self.critic.opt,self.scheduler.critic_lr_scheduler_fn)
+    self.actor.scheduler = optim.scheduler.LambdaLR(self.actor.opt,self.scheduler.actor_lr_scheduler_fn)
+
+  scheduler = self.scheduler
+  actor = self.actor
+  critic = self.critic
+
+  # initialize target networks
+  target_actor = copy.deepcopy(actor)
+
+  target_critic = copy.deepcopy(critic)
+
+  # initialize and fill memory 
+  memory = SumTree(max_memory_size)
+
+  s1 = self.env.reset()
+  for i in range(max_memory_size):
+    
+    sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
+    #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
+    memory.add(1,sarst)
+    if sarst[4] == 0:
+      s1 = self.env.reset()
+    else:
+      s1 = sarst[3]
+
+  # fit agents
+  for i in range(n_episodes):
+        
+    s1 = self.env.reset()
+
+    ts_reward = 0
+    for j in range(max_ts_by_episode):
+
+      #execute epsilon-greedy policy
+      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
+      s1 = sarst[3] #update current state
+      r = sarst[2]  #get reward
+      done = (sarst[4] == 0) #get termination signal
+
+      #add to memory
+      #print(&#34;train sarst: {s}&#34;.format(s=sarst))
+      memory.add(1,sarst) #default initial weight of 1
+
+      # sgd update
+      if scheduler.counter % scheduler.sgd_update ==0:
+        # get replay batch
+        P = memory.total()
+        N = memory.get_current_size()
+
+        samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+        batch = []
+        batch_ids = []
+        batch_p = []
+        for u in samples:
+          idx, p ,data = memory.get(u)
+          #print(&#34;mem data sarst {s}&#34;.format(s=sarst))
+          batch.append(data) #data from selected leaf
+          batch_ids.append(idx)
+          batch_p.append(p/P)
+
+        #compute importance sampling weights
+        batch_w = np.array(batch_p)
+        batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
+        batch_w /= np.max(batch_w)
+        batch_w = torch.from_numpy(batch_w).float()
+
+        # perform optimisation
+        delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+
+        #update memory
+        #print(np.mean(delta))
+        for k in range(len(delta)):
+          memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
+
+      #target network soft update
+      tau = scheduler.tau
+      for layer in actor.model._modules:
+        target_actor.model._modules[layer].weight.data = (1-tau)*target_actor.model._modules[layer].weight.data + tau*actor.model._modules[layer].weight.data
+
+      for layer in critic.model._modules:
+        target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
+
+  
+      # trace information
+      ts_reward += r
+
+      # update learning rate and other hyperparameters
+      actor.step()
+      critic.step()
+      scheduler._step()
+
+      if done:
+        self.noise_process.reset()
+        break
+
+    self.mean_trace.append(ts_reward/max_ts_by_episode)
+    logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+
+  self.actor = actor
+  self.critic = critic
+
+  if render:
+    self.env.close()</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.DDPG.DDPG.forward"><code class="name flex">
+<span>def <span class="ident">forward</span></span>(<span>self, x)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>evaluate input with agent</p>
+<p>Parameters:</p>
+<p><code>x</code> (<code>torch.Tensor</code>): input vector</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def forward(self,x):
+  &#34;&#34;&#34;evaluate input with agent
+
+  Parameters:
+
+  `x` (`torch.Tensor`): input vector
+
+  &#34;&#34;&#34;
+  if isinstance(x,np.ndarray):
+    x = torch.from_numpy(x).float()
+  return self.agent.model.forward(x)</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.DDPG.DDPG.play"><code class="name flex">
+<span>def <span class="ident">play</span></span>(<span>self, n=200)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
+<p>Parameters:</p>
+<p><code>n</code> (<code>int</code>): maximum number of timesteps to visualise. Defaults to 200</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def play(self,n=200):
+  &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
+  
+  Parameters:
+
+  `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+
+  &#34;&#34;&#34;
+  with torch.no_grad():
+    obs = self.env.reset()
+    for k in range(n):
+      action = self.actor.model.forward(obs)
+      action = torch.min(torch.max(action,self.action_low),self.action_high) #clip action
+      obs,reward,done,info = self.env.step(action)
+      self.env.render()
+      if done:
+        break
+    self.env.close()</code></pre>
+</details>
+</dd>
+<dt id="rlmodels.models.DDPG.DDPG.plot"><code class="name flex">
+<span>def <span class="ident">plot</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>plot mean episodic reward from last <code>fit</code> call</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def plot(self):
+  &#34;&#34;&#34;plot mean episodic reward from last `fit` call
+
+  &#34;&#34;&#34;
+
+  if len(self.mean_trace)==0:
+    print(&#34;The trace is empty.&#34;)
+  else:
+    df = pd.DataFrame({
+      &#34;episode&#34;:list(range(len(self.mean_trace))),
+      &#34;mean reward&#34;: self.mean_trace})
+
+  sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+  plt.show()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+<dt id="rlmodels.models.DDPG.DDPGScheduler"><code class="flex name class">
+<span>class <span class="ident">DDPGScheduler</span></span>
+<span>(</span><span>batch_size, exploration_sdev, PER_alpha, PER_beta, tau, actor_lr_scheduler_fn=None, critic_lr_scheduler_fn=None, sgd_update=None)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>DDPG hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
+At each step it sets the hyperparameter values given by the provided functons</p>
+<p>Parameters:</p>
+<p><code>batch_size_f</code> (<code>function</code>): batch size scheduler function</p>
+<p><code>exploration_sdev</code> (<code>function</code>): standard deviation of exploration noise </p>
+<p><code>PER_alpha</code> (<code>function</code>): prioritised experience replay alpha scheduler function</p>
+<p><code>PER_beta</code> (<code>function</code>): prioritised experience replay beta scheduler function</p>
+<p><code>tau</code> (<code>function</code>): soft target update combination coefficient</p>
+<p><code>actor_lr_scheduler_func</code> (<code>function</code>): multiplicative lr update for actor</p>
+<p><code>critic_lr_scheduler_func</code> (<code>function</code>): multiplicative lr update for critic</p>
+<p><code>sgd_update</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class DDPGScheduler(object):
+  &#34;&#34;&#34;DDPG hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
+  At each step it sets the hyperparameter values given by the provided functons
+
+  Parameters:
+  
+  `batch_size_f` (`function`): batch size scheduler function
+
+  `exploration_sdev` (`function`): standard deviation of exploration noise 
+
+  `PER_alpha` (`function`): prioritised experience replay alpha scheduler function
+
+  `PER_beta` (`function`): prioritised experience replay beta scheduler function
+
+  `tau` (`function`): soft target update combination coefficient
+
+  `actor_lr_scheduler_func` (`function`): multiplicative lr update for actor
+
+  `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
+
+  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+
+  &#34;&#34;&#34;
+  def __init__(
+    self,
+    batch_size,
+    exploration_sdev,
+    PER_alpha,
+    PER_beta,
+    tau,
+    actor_lr_scheduler_fn = None,
+    critic_lr_scheduler_fn = None,
+    sgd_update = None):
+
+    self.batch_size_f = batch_size
+    self.exploration_sdev_f = exploration_sdev
+    self.PER_alpha_f = PER_alpha
+    self.tau_f = tau
+    self.critic_lr_scheduler_fn = critic_lr_scheduler_fn
+    self.actor_lr_scheduler_fn = actor_lr_scheduler_fn
+    self.PER_beta_f = PER_beta
+    self.sgd_update_f = sgd_update if sgd_update is None else lambda t: 1
+
+    self.reset()
+
+  def _step(self):
+
+    self.batch_size = self.batch_size_f(self.counter)
+    self.exploration_sdev = self.exploration_sdev_f(self.counter)
+    self.PER_alpha = self.PER_alpha_f(self.counter)
+    self.tau = self.tau_f(self.counter)
+    self.PER_beta = self.PER_beta_f(self.counter)
+    self.sgd_update = self.sgd_update_f(self.counter)
+
+    self.counter += 1
+
+  def reset(self):
+
+    &#34;&#34;&#34;reset iteration counter
+  
+    &#34;&#34;&#34;
+    self.counter = 0
+
+    self._step()</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.DDPG.DDPGScheduler.reset"><code class="name flex">
+<span>def <span class="ident">reset</span></span>(<span>self)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>reset iteration counter</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def reset(self):
+
+  &#34;&#34;&#34;reset iteration counter
+
+  &#34;&#34;&#34;
+  self.counter = 0
+
+  self._step()</code></pre>
+</details>
+</dd>
+</dl>
+</dd>
+</dl>
+</section>
+</article>
+<nav id="sidebar">
+<h1>Index</h1>
+<div class="toc">
+<ul></ul>
+</div>
+<ul id="index">
+<li><h3>Super-module</h3>
+<ul>
+<li><code><a title="rlmodels.models" href="index.html">rlmodels.models</a></code></li>
+</ul>
+</li>
+<li><h3><a href="#header-classes">Classes</a></h3>
+<ul>
+<li>
+<h4><code><a title="rlmodels.models.DDPG.AR1Noise" href="#rlmodels.models.DDPG.AR1Noise">AR1Noise</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.DDPG.AR1Noise.reset" href="#rlmodels.models.DDPG.AR1Noise.reset">reset</a></code></li>
+<li><code><a title="rlmodels.models.DDPG.AR1Noise.sample" href="#rlmodels.models.DDPG.AR1Noise.sample">sample</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rlmodels.models.DDPG.DDPG" href="#rlmodels.models.DDPG.DDPG">DDPG</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.DDPG.DDPG.fit" href="#rlmodels.models.DDPG.DDPG.fit">fit</a></code></li>
+<li><code><a title="rlmodels.models.DDPG.DDPG.forward" href="#rlmodels.models.DDPG.DDPG.forward">forward</a></code></li>
+<li><code><a title="rlmodels.models.DDPG.DDPG.play" href="#rlmodels.models.DDPG.DDPG.play">play</a></code></li>
+<li><code><a title="rlmodels.models.DDPG.DDPG.plot" href="#rlmodels.models.DDPG.DDPG.plot">plot</a></code></li>
+</ul>
+</li>
+<li>
+<h4><code><a title="rlmodels.models.DDPG.DDPGScheduler" href="#rlmodels.models.DDPG.DDPGScheduler">DDPGScheduler</a></code></h4>
+<ul class="">
+<li><code><a title="rlmodels.models.DDPG.DDPGScheduler.reset" href="#rlmodels.models.DDPG.DDPGScheduler.reset">reset</a></code></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+</nav>
+</main>
+<footer id="footer">
+<p>Generated by <a href="https://pdoc3.github.io/pdoc"><cite>pdoc</cite> 0.6.3</a>.</p>
+</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/highlight.min.js"></script>
+<script>hljs.initHighlightingOnLoad()</script>
+</body>
+</html>
