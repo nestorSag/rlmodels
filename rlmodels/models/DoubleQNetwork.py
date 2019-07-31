@@ -12,6 +12,8 @@ import torch.optim as optim
 
 from .grad_utils import *
 
+import logging
+
 class DoubleQNetworkScheduler(object):
   """double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
@@ -28,7 +30,7 @@ class DoubleQNetworkScheduler(object):
 
   `tau` (`function`): hard target update time window scheduler function
 
-  `learning_rate_update` (`function`): multiplicative update factor scheduler function to be passed to torch LambdaLR scheduler
+  `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
   `sgd_update` (`function`): steps between SGD updates as a function of the step counter
 
@@ -40,16 +42,17 @@ class DoubleQNetworkScheduler(object):
     PER_alpha,
     PER_beta,
     tau,
-    learning_rate_update,
-    sgd_update):
+    agent_lr_scheduler_fn=None,
+    sgd_update=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.learning_rate_f = learning_rate_update
-    self.sgd_update_f = sgd_update
+    self.sgd_update_f = sgd_update if sgd_update is not None else lambda t: 1
+
+    self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
     self.reset()
 
@@ -60,7 +63,6 @@ class DoubleQNetworkScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.learning_rate = self.learning_rate_f(self.counter)
     self.sgd_update = self.sgd_update_f(self.counter)
 
     self.counter += 1
@@ -79,9 +81,7 @@ class DoubleQNetwork(object):
 
   Parameters:
 
-  `agent` (`torch.nn.Module`): Pytorch neural network model
-
-  `target` (`torch.nn.Module`): Pytorch neural network model of same class as agent
+  `agent` (`rlmodels.models.Agent`): agent model wrapper
 
   `env`: environment object with the same interface as OpenAI gym's environments
 
@@ -91,11 +91,21 @@ class DoubleQNetwork(object):
   def __init__(self,agent,env,scheduler):
 
     self.agent = agent
+    self.agent.loss = nn.MSELoss()
     self.env = env
     self.scheduler = scheduler
     self.mean_trace = []
 
-  def _update(self,agent1,agent2,batch,discount_rate, sample_weights):
+    if self.scheduler.agent_lr_scheduler_fn is not None:
+      self.agent.scheduler = optim.lr_scheduler.LambdaLR(self.agent.optim,self.scheduler.agent_lr_scheduler_fn)
+
+  def _update(
+    self,
+    agent1,
+    agent2,
+    batch,
+    discount_rate,
+    sample_weights):
     # perform gradient descent on agent1 
 
     # return delta = PER weights. agents are updated in-place
@@ -116,17 +126,23 @@ class DoubleQNetwork(object):
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
   
-  #optimise
+    #optimise
     agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
     agent1.optim.step()
 
     delta = torch.abs(Y_hat-Y).detach().numpy()
 
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
+      with torch.no_grad():
+        Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
+        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+      logging.debug("mean loss improvement: {x}".format(x=np.mean(delta)-np.mean(delta2)))
+
     agent1.optim.zero_grad()
 
     return delta
 
-  def _step(self,agent,target,s1,eps):
+  def _step(self,agent,target,s1,eps,render=False):
     # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
     with torch.no_grad():
       q = agent.forward(s1)
@@ -140,6 +156,8 @@ class DoubleQNetwork(object):
     sarst = (s1,a) #t = termination
 
     s2,r,done,info = self.env.step(a)
+    if render:
+      self.env.render()
     sarst += (r,s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
 
     return sarst
@@ -148,11 +166,11 @@ class DoubleQNetwork(object):
     self,
     n_episodes,
     max_ts_by_episode,
-    initial_learning_rate=0.001,
     discount_rate=0.99,
     max_memory_size=2000,
     verbose = True,
-    reset=False):
+    reset=False,
+    render = False):
 
     """
     Fit the agent 
@@ -163,8 +181,6 @@ class DoubleQNetwork(object):
 
     `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
 
-    `initial_learning_rate` (`float`): initial SGD learning rate
-
     `discount_rate` (`float`): reward discount rate. Defaults to 0.99
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
@@ -173,29 +189,21 @@ class DoubleQNetwork(object):
 
     `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
 
+    `render` (`boolean`): render environment while fitting
+
     Returns:
     (`nn.Module`) updated agent
 
     """
     if reset:
       self.scheduler.reset()
+      self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
       self.trace = []
 
     scheduler = self.scheduler
 
-    # initialize agents
-    agent = Agent(
-      model = self.agent,
-      optim_ = optim.SGD(self.agent.parameters(),lr=initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.learning_rate_f)
-
-    target = Agent(
-      model = copy.deepcopy(self.agent),
-      optim_ = optim.SGD(self.agent.parameters(),lr=initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.learning_rate_f)
-
+    agent = self.agent
+    target = copy.deepcopy(agent)
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
@@ -218,7 +226,7 @@ class DoubleQNetwork(object):
       for j in range(max_ts_by_episode):
 
         #execute epsilon-greedy policy
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate)
+        sarst = self._step(agent,target,s1,scheduler.exploration_rate,render)
 
         s1 = sarst[3] #update current state
         r = sarst[2]  #get reward
@@ -272,13 +280,10 @@ class DoubleQNetwork(object):
           break
 
       self.mean_trace.append(ts_reward/max_ts_by_episode)
-      if verbose:
-      	print("episode {n}, timestep {ts}, mean reward {x}".format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+      logging.info("episode {n}, timestep {ts}, mean reward {x}".format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
 
-    self.agent = agent.model
-    self.target = target.model
-
-    return agent.model, target.model
+    if render:
+      self.env.close()
 
   def plot(self):
     """plot mean episodic reward from last `fit` call
@@ -306,7 +311,7 @@ class DoubleQNetwork(object):
     with torch.no_grad():
       obs = self.env.reset()
       for k in range(n):
-        action = np.argmax(self.agent.forward(obs).numpy())
+        action = np.argmax(self.agent.model.forward(obs).numpy())
         obs,reward,done,info = self.env.step(action)
         self.env.render()
         if done:
@@ -323,4 +328,4 @@ class DoubleQNetwork(object):
     """
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
-    return self.agent.forward(x)
+    return self.agent.model.forward(x)

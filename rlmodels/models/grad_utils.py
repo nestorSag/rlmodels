@@ -111,22 +111,18 @@ class Agent(object):
 
   `optim_` (`torch.optim`): Pytorch optimizer object 
 
-  `loss` : pytorch loss function
-
-  `scheduler_func`: Python learning rate scheduler
-
   """
-
   
-  def __init__(self,model,optim_,loss,scheduler_func):
+  def __init__(self,model,opt=None):
     self.model = model
-    self.optim = optim_
-    self.loss = loss
-
-    self.optim.zero_grad()
-    self.scheduler = optim.lr_scheduler.LambdaLR(self.optim,lr_lambda=[scheduler_func])
+    self.optim = opt
+    self.scheduler = None
 
   def forward(self,x):
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
     return self.model.forward(x)
+
+  def step(self):
+    if self.scheduler is not None:
+      self.scheduler.step()

@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
 
+import logging
 
 class CMAESScheduler(object):
   """CMAES hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global generation counter.
@@ -180,7 +181,8 @@ class CMAES(object):
       episodes_by_ind=10,
       max_ts_by_episode=200,
       verbose=True,
-      reset=False):
+      reset=False,
+      debug_logger=False):
 
     """Fit the agent 
   
@@ -207,6 +209,13 @@ class CMAES(object):
     (`torch nn.Module`) best-performing agent from last generation
 
     """
+
+    if debug_logger:
+      logging.basicConfig(level=logging.DEBUG)
+    else:
+      logging.basicConfig(level=logging.INFO)
+
+
     if reset:
       self.scheduler.reset()
       self.mean_trace = []
@@ -262,7 +271,7 @@ class CMAES(object):
       weights = weight_func(self._calculate_rank(population_rewards))
 
       if ((np.argsort(population_rewards) - np.argsort(weights)) != 0).any():
-        print("Warning: recombination weights function does not preserve rank order")
+        logging.warning("Warning: recombination weights function does not preserve rank order")
 
       norm_weights = weights/np.sum(weights)
 
@@ -275,8 +284,7 @@ class CMAES(object):
       #debug info
       self.mean_trace.append(np.mean(population_rewards))
       self.max_trace.append(np.max(population_rewards))
-      if verbose:
-        print("generation {n}, mean trace {x}, max trace {y}".format(n=i,x=np.mean(population_rewards),y=np.max(population_rewards)))
+      logging.info("generation {n}, mean trace {x}, max trace {y}".format(n=i,x=np.mean(population_rewards),y=np.max(population_rewards)))
 
       w_mean, r1updates = self._get_population_statistics(population)
 

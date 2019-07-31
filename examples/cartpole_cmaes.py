@@ -3,8 +3,11 @@ import torch
 import torch.optim as optim
 import gym
 
-from rlmodels.models.es import *
+from rlmodels.models.CMAES import *
 from rlmodels.nets import VanillaNet
+
+FORMAT = '%(asctime)-15s: %(message)s'
+logging.basicConfig(level=logging.INFO,format=FORMAT,filename="model_fit.log",filemode="a")
 
 env = gym.make('CartPole-v0')
 
@@ -16,6 +19,7 @@ torch.manual_seed(1)
 def binary_output(x):
   return np.argmax(x.detach().numpy())
 
+#CMAES is not gradient-based, so we don't have to wrap the model in an Agent instance
 agent = VanillaNet([6,6],4,2,binary_output)
 
 # set hyperparameter runtime schedule as a function of the global number of timesteps

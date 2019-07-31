@@ -12,6 +12,8 @@ import torch.optim as optim
 
 from .grad_utils import *
 
+import logging
+
 class DDPGScheduler(object):
   """DDPG hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
@@ -28,9 +30,9 @@ class DDPGScheduler(object):
 
   `tau` (`function`): soft target update combination coefficient
 
-  `actor_learning_rate_update` (`function`): multiplicative update factor scheduler function to be passed to torch LambdaLR scheduler
+  `actor_lr_scheduler_func` (`function`): multiplicative lr update for actor
 
-  `critic_learning_rate_update` (`function`): multiplicative update factor scheduler function to be passed to torch LambdaLR scheduler
+  `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
 
   `sgd_update` (`function`): steps between SGD updates as a function of the step counter
 
@@ -42,18 +44,18 @@ class DDPGScheduler(object):
     PER_alpha,
     PER_beta,
     tau,
-    actor_learning_rate_update,
-    critic_learning_rate_update,
-    sgd_update):
+    actor_lr_scheduler_fn = None,
+    critic_lr_scheduler_fn = None,
+    sgd_update = None):
 
     self.batch_size_f = batch_size
     self.exploration_sdev_f = exploration_sdev
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
+    self.critic_lr_scheduler_fn = critic_lr_scheduler_fn
+    self.actor_lr_scheduler_fn = actor_lr_scheduler_fn
     self.PER_beta_f = PER_beta
-    self.actor_learning_rate_f = actor_learning_rate_update
-    self.critic_learning_rate_f = critic_learning_rate_update
-    self.sgd_update_f = sgd_update
+    self.sgd_update_f = sgd_update if sgd_update is None else lambda t: 1
 
     self.reset()
 
@@ -64,8 +66,6 @@ class DDPGScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.actor_learning_rate = self.actor_learning_rate_f(self.counter)
-    self.critic_learning_rate = self.critic_learning_rate_f(self.counter)
     self.sgd_update = self.sgd_update_f(self.counter)
 
     self.counter += 1
@@ -79,14 +79,46 @@ class DDPGScheduler(object):
 
     self._step()
 
+
+class AR1Noise(object):
+  """autocrrelated noise process for DDPG exploration
+
+  Parameters:
+
+  `size` (`int`): process sample size
+
+  `seed` (`int`): random seed
+
+  `mu` (`float` or `np.ndarray`): noise mean
+
+  `sigma` (`float` or `np.ndarray`): noise standard deviation
+  """
+  #
+  def __init__(self, size, seed, mu=0., sigma=0.2):
+    """Initialize parameters and noise process."""
+    self.mu = mu * np.ones(size)
+    self.sigma = sigma
+    self.seed = np.random.seed(seed)
+    self.reset()
+  #
+  def reset(self):
+    """Reset the internal state (= noise) to mean (mu)."""
+    self.state = 0
+  #
+  def sample(self):
+    """Update internal state and return it as a noise sample."""
+    self.state = 0.9*self.state + np.random.normal(self.mu,self.sigma,size=1)
+    return self.state
+
+
 class DDPG(object):
   """deterministic deep policy gradient with importance-sampled prioritised experienced replay (PER)
 
   Parameters:
 
-  `agent` (`torch.nn.Module`): Pytorch neural network model
+  `agent` (`rlmodels.models.Agent`): Pytorch neural network model
 
-  `target` (`torch.nn.Module`): Pytorch neural network model of same class as agent
+  `critic` (`rlmodels.models.Agent`): Pytorch neural network model of same class as agent
 
   `env`: environment object with the same interface as OpenAI gym's environments
 
@@ -97,16 +129,37 @@ class DDPG(object):
 
     self.actor = actor
     self.critic = critic
+    self.critic.loss = nn.MSELoss()
+
     self.env = env
 
     #get input and output dims
-    self.input_dim = self.env.observation_space.shape[0]
-    self.output_dim = self.env.action_space.shape[0]
+    self.state_dim = self.env.observation_space.shape[0]
+    self.action_dim = self.env.action_space.shape[0]
 
+    #get action space boundaries
+    self.action_high = torch.from_numpy(env.action_space.high).float()
+    self.action_low = torch.from_numpy(env.action_space.low).float()
+
+    self.noise_process = AR1Noise(size=self.action_dim,seed=1)
     self.scheduler = scheduler
     self.mean_trace = []
 
-  def _update(self,actor,critic,target_actor,target_critic,batch,discount_rate, sample_weights):
+    if self.scheduler.critic_lr_scheduler_fn is not None:
+      self.critic.scheduler = optim.lr_scheduler.LambdaLR(self.critic.optim,self.scheduler.critic_lr_scheduler_fn)
+
+    if self.scheduler.actor_lr_scheduler_fn is not None:
+      self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
+
+  def _update(
+    self,
+    actor,
+    critic,
+    target_actor,
+    target_critic,
+    batch,
+    discount_rate, 
+    sample_weights):
     # perform gradient descent on actor and critic 
 
     # return delta = PER weights. agents are updated in-place
@@ -121,6 +174,10 @@ class DDPG(object):
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
     # calculate critic target
+    critic.model.zero_grad()
+    critic.optim.zero_grad()
+    target_critic.model.zero_grad()
+
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
 
@@ -128,35 +185,48 @@ class DDPG(object):
 
     Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
 
+    delta = torch.abs(Y_hat-Y).detach().numpy()
     #optimise critic
     critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
     critic.optim.step()
 
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        improvement = np.mean(delta) - np.mean(delta2)
+      logging.debug("Critic mean loss improvement: {x}".format(x=improvement))
 
-    # calculate actor target
-    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1))) #decide with q network
+    # optimise actor
+    actor.model.zero_grad()
+    target_actor.model.zero_grad()
+
+    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
     q.backward()
-    #optimise actor
     actor.optim.step()
 
+    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+      with torch.no_grad():
+        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      logging.debug("Actor mean Q-improvement: {x}".format(x=-q2+q))
+
     delta = torch.abs(Y_hat-Y).detach().numpy()
-
-    actor.optim.zero_grad()
-    critic.optim.zero_grad()
-    target_critic.optim.zero_grad()
-    target_actor.optim.zero_grad()
-
     return delta
 
-  def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev):
+  def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
     # perform an action given actor, critic and their targets, the current state, and an epsilon (exploration probability)
-    
+    self.noise_process.sigma = exploration_sdev
     with torch.no_grad():
-      a = actor.forward(s1) + torch.from_numpy(np.random.normal(0,exploration_sdev,self.output_dim)).float()
+      #eps = torch.from_numpy(np.random.normal(0,exploration_sdev,self.action_dim)).float()
+      eps = torch.from_numpy(self.noise_process.sample()).float()
+      a = actor.forward(s1) + eps
+      a = torch.min(torch.max(a,self.action_low),self.action_high) #clip action
 
     sarst = (s1,a) #t = termination
 
     s2,r,done,info = self.env.step(a)
+    if render:
+      self.env.render()
     sarst += (float(r),s2,1-int(done)) #t = termination signal (t=0 if s2 is terminal state, t=1 otherwise)
 
     return sarst
@@ -165,12 +235,11 @@ class DDPG(object):
     self,
     n_episodes,
     max_ts_by_episode,
-    actor_initial_learning_rate=0.001,
-    critic_initial_learning_rate=0.001,
     discount_rate=0.99,
     max_memory_size=2000,
     verbose = True,
-    reset=False):
+    reset=False,
+    render=False):
 
     """
     Fit the agent 
@@ -181,10 +250,6 @@ class DDPG(object):
 
     `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
 
-    `actor_initial_learning_rate` (`float`): initial SGD learning rate
-
-    `critic_initial_learning_rate` (`float`): initial SGD learning rate
-
     `discount_rate` (`float`): reward discount rate. Defaults to 0.99
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
@@ -193,42 +258,27 @@ class DDPG(object):
 
     `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
 
+    `render` (`boolean`): render environment while fitting
+
     Returns:
     (`nn.Module`) updated agent
 
     """
+
     if reset:
       self.scheduler.reset()
       self.trace = []
+      self.critic.scheduler = optim.scheduler.LambdaLR(self.critic.opt,self.scheduler.critic_lr_scheduler_fn)
+      self.actor.scheduler = optim.scheduler.LambdaLR(self.actor.opt,self.scheduler.actor_lr_scheduler_fn)
 
     scheduler = self.scheduler
+    actor = self.actor
+    critic = self.critic
 
-    # initialize agents
-    actor = Agent(
-      model = self.actor,
-      optim_ = optim.SGD(self.actor.parameters(),lr=actor_initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.actor_learning_rate_f)
+    # initialize target networks
+    target_actor = copy.deepcopy(actor)
 
-    target_actor_model = copy.deepcopy(self.actor)
-    target_actor = Agent(
-      model = target_actor_model,
-      optim_ = optim.SGD(target_actor_model.parameters(),lr=actor_initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.actor_learning_rate_f)
-
-    critic = Agent(
-      model = self.critic,
-      optim_ = optim.SGD(self.critic.parameters(),lr=critic_initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.critic_learning_rate_f)
-
-    target_critic_model = copy.deepcopy(self.critic)
-    target_critic = Agent(
-      model = target_critic_model,
-      optim_ = optim.SGD(target_critic_model.parameters(),lr=critic_initial_learning_rate,weight_decay = 0, momentum = 0),
-      loss = nn.MSELoss(),
-      scheduler_func = scheduler.critic_learning_rate_f)
+    target_critic = copy.deepcopy(critic)
 
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
@@ -236,7 +286,7 @@ class DDPG(object):
     s1 = self.env.reset()
     for i in range(max_memory_size):
       
-      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev)
+      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
       #print("mem fill sarst: {s}".format(s=sarst))
       memory.add(1,sarst)
       if sarst[4] == 0:
@@ -253,7 +303,7 @@ class DDPG(object):
       for j in range(max_ts_by_episode):
 
         #execute epsilon-greedy policy
-        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev)
+        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
         s1 = sarst[3] #update current state
         r = sarst[2]  #get reward
         done = (sarst[4] == 0) #get termination signal
@@ -289,6 +339,7 @@ class DDPG(object):
           delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
 
           #update memory
+          #print(np.mean(delta))
           for k in range(len(delta)):
             memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
 
@@ -305,21 +356,22 @@ class DDPG(object):
         ts_reward += r
 
         # update learning rate and other hyperparameters
-        actor.scheduler.step()
-        critic.scheduler.step()
+        actor.step()
+        critic.step()
         scheduler._step()
 
         if done:
+          self.noise_process.reset()
           break
 
       self.mean_trace.append(ts_reward/max_ts_by_episode)
-      if verbose:
-        print("episode {n}, timestep {ts}, mean reward {x}".format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+      logging.info("episode {n}, timestep {ts}, mean reward {x}".format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
 
-    self.actor = actor.model
-    self.critic = critic.model
+    self.actor = actor
+    self.critic = critic
 
-    return actor.model, critic.model
+    if render:
+      self.env.close()
 
   def plot(self):
     """plot mean episodic reward from last `fit` call
@@ -347,7 +399,8 @@ class DDPG(object):
     with torch.no_grad():
       obs = self.env.reset()
       for k in range(n):
-        action = self.actor.forward(obs)
+        action = self.actor.model.forward(obs)
+        action = torch.min(torch.max(action,self.action_low),self.action_high) #clip action
         obs,reward,done,info = self.env.step(action)
         self.env.render()
         if done:
@@ -364,4 +417,4 @@ class DDPG(object):
     """
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
-    return self.agent.forward(x)
+    return self.agent.model.forward(x)
