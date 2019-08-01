@@ -43,14 +43,14 @@ class DoubleQNetworkScheduler(object):
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    sgd_update=None):
+    n_sgd_updates=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.sgd_update_f = sgd_update if sgd_update is not None else lambda t: 1
+    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -63,7 +63,7 @@ class DoubleQNetworkScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.sgd_update = self.sgd_update_f(self.counter)
+    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
 
     self.counter += 1
 
@@ -236,7 +236,7 @@ class DoubleQNetwork(object):
         memory.add(1,sarst) #default initial weight of 1
 
         # sgd update
-        if scheduler.counter % scheduler.sgd_update ==0:
+        for h in range(scheduler.n_sgd_updates):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
