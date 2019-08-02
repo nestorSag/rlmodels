@@ -29,7 +29,7 @@ ddq_scheduler = DoubleQNetworkScheduler(
 	PER_beta = lambda t: 1, #constant
 	tau = lambda t: 100, #constant
 	agent_lr_scheduler_fn = lambda t: 1.25**(-int(t/2500)), #decrease step size every 2,500 steps,
-	sgd_update = lambda t: 1) #constant
+	n_sgd_updates = lambda t: 1) #constant
 
 agent_lr = 0.5 #initial learning rate
 agent_model = VanillaNet([60],4,2,None)
@@ -40,7 +40,8 @@ agent = Agent(agent_model,agent_opt)
 ddq = DoubleQNetwork(agent,env,ddq_scheduler)
 
 ddq.fit(
-	n_episodes=350,
+	n_episodes=150,
 	max_ts_by_episode=max_ep_ts,
 	max_memory_size=2000,
+	td_steps=1,
 	verbose=True)

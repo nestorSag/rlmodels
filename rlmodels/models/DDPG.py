@@ -34,7 +34,7 @@ class DDPGScheduler(object):
 
   `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
 
-  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_get_deltas` (`function`): steps between SGD updates as a function of the step counter
 
   """
   def __init__(
@@ -151,7 +151,7 @@ class DDPG(object):
     if self.scheduler.actor_lr_scheduler_fn is not None:
       self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     actor,
     critic,
@@ -159,10 +159,10 @@ class DDPG(object):
     target_critic,
     batch,
     discount_rate,
-    sample_weights):
-    # perform gradient descent on actor and critic 
+    sample_weights,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -174,9 +174,9 @@ class DDPG(object):
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
     # calculate critic target
-    critic.model.zero_grad()
+    #critic.model.zero_grad()
     critic.optim.zero_grad()
-    target_critic.model.zero_grad()
+    target_critic.optim.zero_grad()
 
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
@@ -187,30 +187,32 @@ class DDPG(object):
 
     delta = torch.abs(Y_hat-Y).detach().numpy()
     #optimise critic
-    critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    critic.optim.step()
+    if optimise:
+      critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      critic.optim.step()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-        improvement = np.mean(delta) - np.mean(delta2)
-      logging.debug("Critic mean loss improvement: {x}".format(x=improvement))
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+          improvement = np.mean(delta) - np.mean(delta2)
+        logging.debug("Critic mean loss improvement: {x}".format(x=improvement))
+
+    
+    actor.optim.zero_grad()
+    target_actor.optim.zero_grad()
 
     # optimise actor
-    actor.model.zero_grad()
-    target_actor.model.zero_grad()
+    if optimise:
+      q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      q.backward()
+      actor.optim.step()
 
-    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-    q.backward()
-    actor.optim.step()
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+        logging.debug("Actor mean Q-improvement: {x}".format(x=-q2+q))
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-      logging.debug("Actor mean Q-improvement: {x}".format(x=-q2+q))
-
-    delta = torch.abs(Y_hat-Y).detach().numpy()
     return delta
 
   def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
@@ -232,7 +234,7 @@ class DDPG(object):
     return sarst
 
   def _process_td_steps(self,step_list,discount_rate):
-    # process temporal difference trace
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
     s0 = step_list[0][0]
     a = step_list[0][1]
     R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
@@ -265,7 +267,7 @@ class DDPG(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `td_Steps` (`int`): number of steps in temporal difference learning scheme
+    `td_steps` (`int`): number of temporal difference steps to use in target
 
     `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
 
@@ -352,7 +354,7 @@ class DDPG(object):
         if td == td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          delta = self._update(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1))
+          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
           #memory.add(1,td_sarst)
 
@@ -383,7 +385,7 @@ class DDPG(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -409,9 +411,9 @@ class DDPG(object):
           # compute temporal difference n-steps SARST and its delta
           if len(step_list) != 0:
             td_sarst = self._process_td_steps(step_list,discount_rate)
-            delta = self._update(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1))
+            delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),optimise=False)
             memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-            ##memory.add(1,td_sarst)
+            #memory.add(1,td_sarst)
             td = 0
             step_list = []
 

@@ -32,7 +32,7 @@ class DoubleQNetworkScheduler(object):
 
   `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
-  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+  `sgd_get_delta` (`function`): steps between SGD updates as a function of the step counter
 
   """
   def __init__(
@@ -99,16 +99,16 @@ class DoubleQNetwork(object):
     if self.scheduler.agent_lr_scheduler_fn is not None:
       self.agent.scheduler = optim.lr_scheduler.LambdaLR(self.agent.optim,self.scheduler.agent_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     agent1,
     agent2,
     batch,
     discount_rate,
-    sample_weights):
-    # perform gradient descent on agent1 
+    sample_weights,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -125,18 +125,19 @@ class DoubleQNetwork(object):
       Y = R.view(-1,1) + discount_rate*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
-  
-    #optimise
-    agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    agent1.optim.step()
-
+    
     delta = torch.abs(Y_hat-Y).detach().numpy()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
-      with torch.no_grad():
-        Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-      logging.debug("mean loss improvement: {x}".format(x=np.mean(delta)-np.mean(delta2)))
+    if optimise:
+      #optimise
+      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      agent1.optim.step()
+
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
+        with torch.no_grad():
+          Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        logging.debug("mean loss improvement: {x}".format(x=np.mean(delta)-np.mean(delta2)))
 
     agent1.optim.zero_grad()
 
@@ -162,6 +163,16 @@ class DoubleQNetwork(object):
 
     return sarst
 
+  def _process_td_steps(self,step_list,discount_rate):
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
+    s0 = step_list[0][0]
+    a = step_list[0][1]
+    R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
+    s1 = step_list[-1][3]
+    t = step_list[-1][4]
+
+    return (s0,a,R,s1,t)
+
   def fit(
     self,
     n_episodes,
@@ -169,6 +180,7 @@ class DoubleQNetwork(object):
     discount_rate=0.99,
     max_memory_size=2000,
     verbose = True,
+    td_steps = 1,
     reset=False,
     render = False):
 
@@ -207,15 +219,38 @@ class DoubleQNetwork(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
+    memsize = 0
+    step_list = []
+    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    for i in range(max_memory_size):
-    	
-    	sarst = self._step(agent,target,s1,scheduler.exploration_rate)
-    	memory.add(1,sarst)
-    	if sarst[4] == 0:
-    		s1 = self.env.reset()
-    	else:
-    		s1 = sarst[3]
+    while memsize < max_memory_size:
+      # fill step list
+      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+      s1 = step_list[-1][3]
+      done = (step_list[-1][4] == 0)
+      td += 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      if done:
+        # compute temporal difference n-steps SARST
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          #calculate sarst delta
+          memory.add(1,td_sarst)
+
+          memsize +=1
+          td = 0
+          step_list = []
+
+        s1 = self.env.reset()
 
     # fit agent
     for i in range(n_episodes):
@@ -223,17 +258,28 @@ class DoubleQNetwork(object):
       s1 = self.env.reset()
 
       ts_reward = 0
+
+      td = 0
+      step_list = []
+
       for j in range(max_ts_by_episode):
 
-        #execute epsilon-greedy policy
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate,render)
+        #execute policy
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        td += 1
+        s1 = step_list[-1][3]
+        r = step_list[-1][2] #latest reward
+        done = (step_list[-1][4] == 0)
 
-        s1 = sarst[3] #update current state
-        r = sarst[2]  #get reward
-        done = (sarst[4] == 0) #get termination signal
+        if td == td_steps:
+          # compute temporal difference n-steps SARST and its delta
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
 
-        #add to memory
-        memory.add(1,sarst) #default initial weight of 1
+          td = 0
+          step_list = []
 
         # sgd update
         for h in range(scheduler.n_sgd_updates):
@@ -258,7 +304,7 @@ class DoubleQNetwork(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(agent,target,batch,discount_rate,batch_w)
+          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -277,6 +323,15 @@ class DoubleQNetwork(object):
         scheduler._step()
 
         if done:
+
+          if len(step_list) != 0:
+            td_sarst = self._process_td_steps(step_list,discount_rate)
+            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+            #memory.add(1,td_sarst)
+            td = 0
+            step_list = []
+
           break
 
       self.mean_trace.append(ts_reward/max_ts_by_episode)
