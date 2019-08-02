@@ -6,6 +6,8 @@ import gym
 from rlmodels.models.CMAES import *
 from rlmodels.nets import VanillaNet
 
+import logging
+
 FORMAT = '%(asctime)-15s: %(message)s'
 logging.basicConfig(level=logging.INFO,format=FORMAT,filename="model_fit.log",filemode="a")
 
@@ -43,7 +45,9 @@ def wf(ranks):
 cmaes.fit(weight_func=wf,
       reward_objective = None,
       n_generations=20,
-      individuals_by_gen=20,
-      episodes_by_ind=30,
-      max_ts_by_episode=200,
-      verbose=True)
+      individuals_by_gen=10,
+      episodes_by_ind=10,
+      max_ts_by_episode=200)
+
+cmaes.plot()
+cmaes.play()

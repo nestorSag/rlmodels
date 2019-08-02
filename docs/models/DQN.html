@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.6.3" />
-<title>rlmodels.models.DoubleQNetwork API documentation</title>
+<title>rlmodels.models.DQN API documentation</title>
 <meta name="description" content="" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
@@ -17,7 +17,7 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Module <code>rlmodels.models.DoubleQNetwork</code></h1>
+<h1 class="title">Module <code>rlmodels.models.DQN</code></h1>
 </header>
 <section id="section-intro">
 <details class="source">
@@ -38,7 +38,7 @@ from .grad_utils import *
 
 import logging
 
-class DoubleQNetworkScheduler(object):
+class DQNScheduler(object):
   &#34;&#34;&#34;double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
 
@@ -56,7 +56,7 @@ class DoubleQNetworkScheduler(object):
 
   `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
-  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
 
   &#34;&#34;&#34;
   def __init__(
@@ -67,14 +67,14 @@ class DoubleQNetworkScheduler(object):
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    sgd_update=None):
+    n_sgd_updates=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.sgd_update_f = sgd_update if sgd_update is not None else lambda t: 1
+    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -87,7 +87,7 @@ class DoubleQNetworkScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.sgd_update = self.sgd_update_f(self.counter)
+    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
 
     self.counter += 1
 
@@ -100,7 +100,7 @@ class DoubleQNetworkScheduler(object):
 
     self._step()
 
-class DoubleQNetwork(object):
+class DQN(object):
   &#34;&#34;&#34;double Q network with importance-sampled prioritised experienced replay (PER)
 
   Parameters:
@@ -109,7 +109,7 @@ class DoubleQNetwork(object):
 
   `env`: environment object with the same interface as OpenAI gym&#39;s environments
 
-  `scheduler` (`DoubleQNetworkScheduler`): scheduler object that controls hyperparameter values at runtime
+  `scheduler` (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   def __init__(self,agent,env,scheduler):
@@ -123,16 +123,17 @@ class DoubleQNetwork(object):
     if self.scheduler.agent_lr_scheduler_fn is not None:
       self.agent.scheduler = optim.lr_scheduler.LambdaLR(self.agent.optim,self.scheduler.agent_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     agent1,
     agent2,
     batch,
     discount_rate,
-    sample_weights):
-    # perform gradient descent on agent1 
+    sample_weights,
+    td_steps,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -146,21 +147,22 @@ class DoubleQNetwork(object):
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
-      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
+      Y = R.view(-1,1) + discount_rate**(td_steps)*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
-  
-    #optimise
-    agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    agent1.optim.step()
-
+    
     delta = torch.abs(Y_hat-Y).detach().numpy()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
-      with torch.no_grad():
-        Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-      logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
+    if optimise:
+      #optimise
+      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      agent1.optim.step()
+
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
+        with torch.no_grad():
+          Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
 
     agent1.optim.zero_grad()
 
@@ -186,13 +188,23 @@ class DoubleQNetwork(object):
 
     return sarst
 
+  def _process_td_steps(self,step_list,discount_rate):
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
+    s0 = step_list[0][0]
+    a = step_list[0][1]
+    R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
+    s1 = step_list[-1][3]
+    t = step_list[-1][4]
+
+    return (s0,a,R,s1,t)
+
   def fit(
     self,
     n_episodes,
     max_ts_by_episode,
     discount_rate=0.99,
     max_memory_size=2000,
-    verbose = True,
+    td_steps = 1,
     reset=False,
     render = False):
 
@@ -209,9 +221,9 @@ class DoubleQNetwork(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -219,6 +231,7 @@ class DoubleQNetwork(object):
     (`nn.Module`) updated agent
 
     &#34;&#34;&#34;
+    logging.info(&#34;Running DQN.fit&#34;)
     if reset:
       self.scheduler.reset()
       self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
@@ -231,36 +244,72 @@ class DoubleQNetwork(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
+    memsize = 0
+    step_list = []
+    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    for i in range(max_memory_size):
-        
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate)
-        memory.add(1,sarst)
-        if sarst[4] == 0:
-                s1 = self.env.reset()
-        else:
-                s1 = sarst[3]
+    logging.info(&#34;filling memory...&#34;)
+    while memsize &lt; max_memory_size:
+      # fill step list
+      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+      s1 = step_list[-1][3]
+      done = (step_list[-1][4] == 0)
+      td += 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      if done:
+        # compute temporal difference n-steps SARST
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          #calculate sarst delta
+          memory.add(1,td_sarst)
+
+          memsize +=1
+          td = 0
+          step_list = []
+
+        s1 = self.env.reset()
 
     # fit agent
+    logging.info(&#34;Training...&#34;)
     for i in range(n_episodes):
           
       s1 = self.env.reset()
 
       ts_reward = 0
+
+      td = 0
+      step_list = []
+
       for j in range(max_ts_by_episode):
 
-        #execute epsilon-greedy policy
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate,render)
+        #execute policy
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        td += 1
+        s1 = step_list[-1][3]
+        r = step_list[-1][2] #latest reward
+        done = (step_list[-1][4] == 0)
 
-        s1 = sarst[3] #update current state
-        r = sarst[2]  #get reward
-        done = (sarst[4] == 0) #get termination signal
+        if td == td_steps:
+          # compute temporal difference n-steps SARST and its delta
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
 
-        #add to memory
-        memory.add(1,sarst) #default initial weight of 1
+          td = 0
+          step_list = []
 
         # sgd update
-        if scheduler.counter % scheduler.sgd_update ==0:
+        for h in range(scheduler.n_sgd_updates):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
@@ -282,7 +331,7 @@ class DoubleQNetwork(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(agent,target,batch,discount_rate,batch_w)
+          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -301,6 +350,15 @@ class DoubleQNetwork(object):
         scheduler._step()
 
         if done:
+
+          if len(step_list) != 0:
+            td_sarst = self._process_td_steps(step_list,discount_rate)
+            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+            #memory.add(1,td_sarst)
+            td = 0
+            step_list = []
+
           break
 
       self.mean_trace.append(ts_reward/max_ts_by_episode)
@@ -364,8 +422,8 @@ class DoubleQNetwork(object):
 <section>
 <h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetwork"><code class="flex name class">
-<span>class <span class="ident">DoubleQNetwork</span></span>
+<dt id="rlmodels.models.DQN.DQN"><code class="flex name class">
+<span>class <span class="ident">DQN</span></span>
 <span>(</span><span>agent, env, scheduler)</span>
 </code></dt>
 <dd>
@@ -373,10 +431,10 @@ class DoubleQNetwork(object):
 <p>Parameters:</p>
 <p><code>agent</code> (<code>rlmodels.models.Agent</code>): agent model wrapper</p>
 <p><code>env</code>: environment object with the same interface as OpenAI gym's environments</p>
-<p><code>scheduler</code> (<a title="rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler" href="#rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler"><code>DoubleQNetworkScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
+<p><code>scheduler</code> (<a title="rlmodels.models.DQN.DQNScheduler" href="#rlmodels.models.DQN.DQNScheduler"><code>DQNScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
 <details class="source">
 <summary>Source code</summary>
-<pre><code class="python">class DoubleQNetwork(object):
+<pre><code class="python">class DQN(object):
   &#34;&#34;&#34;double Q network with importance-sampled prioritised experienced replay (PER)
 
   Parameters:
@@ -385,7 +443,7 @@ class DoubleQNetwork(object):
 
   `env`: environment object with the same interface as OpenAI gym&#39;s environments
 
-  `scheduler` (`DoubleQNetworkScheduler`): scheduler object that controls hyperparameter values at runtime
+  `scheduler` (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   def __init__(self,agent,env,scheduler):
@@ -399,16 +457,17 @@ class DoubleQNetwork(object):
     if self.scheduler.agent_lr_scheduler_fn is not None:
       self.agent.scheduler = optim.lr_scheduler.LambdaLR(self.agent.optim,self.scheduler.agent_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     agent1,
     agent2,
     batch,
     discount_rate,
-    sample_weights):
-    # perform gradient descent on agent1 
+    sample_weights,
+    td_steps,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -422,21 +481,22 @@ class DoubleQNetwork(object):
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
-      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
+      Y = R.view(-1,1) + discount_rate**(td_steps)*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
-  
-    #optimise
-    agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    agent1.optim.step()
-
+    
     delta = torch.abs(Y_hat-Y).detach().numpy()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
-      with torch.no_grad():
-        Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-      logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
+    if optimise:
+      #optimise
+      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      agent1.optim.step()
+
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
+        with torch.no_grad():
+          Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
 
     agent1.optim.zero_grad()
 
@@ -462,13 +522,23 @@ class DoubleQNetwork(object):
 
     return sarst
 
+  def _process_td_steps(self,step_list,discount_rate):
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
+    s0 = step_list[0][0]
+    a = step_list[0][1]
+    R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
+    s1 = step_list[-1][3]
+    t = step_list[-1][4]
+
+    return (s0,a,R,s1,t)
+
   def fit(
     self,
     n_episodes,
     max_ts_by_episode,
     discount_rate=0.99,
     max_memory_size=2000,
-    verbose = True,
+    td_steps = 1,
     reset=False,
     render = False):
 
@@ -485,9 +555,9 @@ class DoubleQNetwork(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -495,6 +565,7 @@ class DoubleQNetwork(object):
     (`nn.Module`) updated agent
 
     &#34;&#34;&#34;
+    logging.info(&#34;Running DQN.fit&#34;)
     if reset:
       self.scheduler.reset()
       self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
@@ -507,36 +578,72 @@ class DoubleQNetwork(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
+    memsize = 0
+    step_list = []
+    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    for i in range(max_memory_size):
-        
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate)
-        memory.add(1,sarst)
-        if sarst[4] == 0:
-                s1 = self.env.reset()
-        else:
-                s1 = sarst[3]
+    logging.info(&#34;filling memory...&#34;)
+    while memsize &lt; max_memory_size:
+      # fill step list
+      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+      s1 = step_list[-1][3]
+      done = (step_list[-1][4] == 0)
+      td += 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      if done:
+        # compute temporal difference n-steps SARST
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          #calculate sarst delta
+          memory.add(1,td_sarst)
+
+          memsize +=1
+          td = 0
+          step_list = []
+
+        s1 = self.env.reset()
 
     # fit agent
+    logging.info(&#34;Training...&#34;)
     for i in range(n_episodes):
           
       s1 = self.env.reset()
 
       ts_reward = 0
+
+      td = 0
+      step_list = []
+
       for j in range(max_ts_by_episode):
 
-        #execute epsilon-greedy policy
-        sarst = self._step(agent,target,s1,scheduler.exploration_rate,render)
+        #execute policy
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        td += 1
+        s1 = step_list[-1][3]
+        r = step_list[-1][2] #latest reward
+        done = (step_list[-1][4] == 0)
 
-        s1 = sarst[3] #update current state
-        r = sarst[2]  #get reward
-        done = (sarst[4] == 0) #get termination signal
+        if td == td_steps:
+          # compute temporal difference n-steps SARST and its delta
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
 
-        #add to memory
-        memory.add(1,sarst) #default initial weight of 1
+          td = 0
+          step_list = []
 
         # sgd update
-        if scheduler.counter % scheduler.sgd_update ==0:
+        for h in range(scheduler.n_sgd_updates):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
@@ -558,7 +665,7 @@ class DoubleQNetwork(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(agent,target,batch,discount_rate,batch_w)
+          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -577,6 +684,15 @@ class DoubleQNetwork(object):
         scheduler._step()
 
         if done:
+
+          if len(step_list) != 0:
+            td_sarst = self._process_td_steps(step_list,discount_rate)
+            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+            #memory.add(1,td_sarst)
+            td = 0
+            step_list = []
+
           break
 
       self.mean_trace.append(ts_reward/max_ts_by_episode)
@@ -632,8 +748,8 @@ class DoubleQNetwork(object):
 </details>
 <h3>Methods</h3>
 <dl>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetwork.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, verbose=True, reset=False, render=False)</span>
+<dt id="rlmodels.models.DQN.DQN.fit"><code class="name flex">
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, td_steps=1, reset=False, render=False)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Fit the agent </p>
@@ -642,8 +758,8 @@ class DoubleQNetwork(object):
 <p><code>max_ts_by_episodes</code> (<code>int</code>): maximum number of timesteps to run per episode</p>
 <p><code>discount_rate</code> (<code>float</code>): reward discount rate. Defaults to 0.99</p>
 <p><code>max_memory_size</code> (<code>int</code>): max memory size for PER. Defaults to 2000</p>
-<p><code>verbose</code> (<code>boolean</code>): if true, print mean and max episodic reward each generation. Defaults to True</p>
-<p><code>reset_scheduler</code> (<code>boolean</code>): reset trace and scheduler time counter to zero if fit has been called before</p>
+<p><code>td_steps</code> (<code>int</code>): number of temporal difference steps to use in learning</p>
+<p><code>reset</code> (<code>boolean</code>): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before</p>
 <p><code>render</code> (<code>boolean</code>): render environment while fitting</p>
 <p>Returns:
 (<code>nn.Module</code>) updated agent</p></section>
@@ -655,7 +771,7 @@ class DoubleQNetwork(object):
   max_ts_by_episode,
   discount_rate=0.99,
   max_memory_size=2000,
-  verbose = True,
+  td_steps = 1,
   reset=False,
   render = False):
 
@@ -672,9 +788,9 @@ class DoubleQNetwork(object):
 
   `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-  `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+  `td_steps` (`int`): number of temporal difference steps to use in learning
 
-  `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+  `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
   `render` (`boolean`): render environment while fitting
 
@@ -682,6 +798,7 @@ class DoubleQNetwork(object):
   (`nn.Module`) updated agent
 
   &#34;&#34;&#34;
+  logging.info(&#34;Running DQN.fit&#34;)
   if reset:
     self.scheduler.reset()
     self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
@@ -694,36 +811,72 @@ class DoubleQNetwork(object):
   # initialize and fill memory 
   memory = SumTree(max_memory_size)
 
+  memsize = 0
+  step_list = []
+  td = 0 #temporal difference step counter
   s1 = self.env.reset()
-  for i in range(max_memory_size):
-      
-      sarst = self._step(agent,target,s1,scheduler.exploration_rate)
-      memory.add(1,sarst)
-      if sarst[4] == 0:
-              s1 = self.env.reset()
-      else:
-              s1 = sarst[3]
+  logging.info(&#34;filling memory...&#34;)
+  while memsize &lt; max_memory_size:
+    # fill step list
+    step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+    s1 = step_list[-1][3]
+    done = (step_list[-1][4] == 0)
+    td += 1
+    if td == td_steps:
+      # compute temporal difference n-steps SARST
+      td_sarst = self._process_td_steps(step_list,discount_rate)
+      #calculate sarst delta
+      memory.add(1,td_sarst)
+
+      memsize +=1
+      td = 0
+      step_list = []
+
+    if done:
+      # compute temporal difference n-steps SARST
+      if len(step_list) != 0:
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      s1 = self.env.reset()
 
   # fit agent
+  logging.info(&#34;Training...&#34;)
   for i in range(n_episodes):
         
     s1 = self.env.reset()
 
     ts_reward = 0
+
+    td = 0
+    step_list = []
+
     for j in range(max_ts_by_episode):
 
-      #execute epsilon-greedy policy
-      sarst = self._step(agent,target,s1,scheduler.exploration_rate,render)
+      #execute policy
+      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+      td += 1
+      s1 = step_list[-1][3]
+      r = step_list[-1][2] #latest reward
+      done = (step_list[-1][4] == 0)
 
-      s1 = sarst[3] #update current state
-      r = sarst[2]  #get reward
-      done = (sarst[4] == 0) #get termination signal
+      if td == td_steps:
+        # compute temporal difference n-steps SARST and its delta
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+        #memory.add(1,td_sarst)
 
-      #add to memory
-      memory.add(1,sarst) #default initial weight of 1
+        td = 0
+        step_list = []
 
       # sgd update
-      if scheduler.counter % scheduler.sgd_update ==0:
+      for h in range(scheduler.n_sgd_updates):
         # get replay batch
         P = memory.total()
         N = memory.get_current_size()
@@ -745,7 +898,7 @@ class DoubleQNetwork(object):
         batch_w = torch.from_numpy(batch_w).float()
 
         # perform optimisation
-        delta = self._update(agent,target,batch,discount_rate,batch_w)
+        delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
 
         #update memory
         for k in range(len(delta)):
@@ -764,6 +917,15 @@ class DoubleQNetwork(object):
       scheduler._step()
 
       if done:
+
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
+          td = 0
+          step_list = []
+
         break
 
     self.mean_trace.append(ts_reward/max_ts_by_episode)
@@ -773,7 +935,7 @@ class DoubleQNetwork(object):
     self.env.close()</code></pre>
 </details>
 </dd>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetwork.forward"><code class="name flex">
+<dt id="rlmodels.models.DQN.DQN.forward"><code class="name flex">
 <span>def <span class="ident">forward</span></span>(<span>self, x)</span>
 </code></dt>
 <dd>
@@ -795,7 +957,7 @@ class DoubleQNetwork(object):
   return self.agent.model.forward(x)</code></pre>
 </details>
 </dd>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetwork.play"><code class="name flex">
+<dt id="rlmodels.models.DQN.DQN.play"><code class="name flex">
 <span>def <span class="ident">play</span></span>(<span>self, n=200)</span>
 </code></dt>
 <dd>
@@ -823,7 +985,7 @@ class DoubleQNetwork(object):
     self.env.close()</code></pre>
 </details>
 </dd>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetwork.plot"><code class="name flex">
+<dt id="rlmodels.models.DQN.DQN.plot"><code class="name flex">
 <span>def <span class="ident">plot</span></span>(<span>self)</span>
 </code></dt>
 <dd>
@@ -848,9 +1010,9 @@ class DoubleQNetwork(object):
 </dd>
 </dl>
 </dd>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler"><code class="flex name class">
-<span>class <span class="ident">DoubleQNetworkScheduler</span></span>
-<span>(</span><span>batch_size, exploration_rate, PER_alpha, PER_beta, tau, agent_lr_scheduler_fn=None, sgd_update=None)</span>
+<dt id="rlmodels.models.DQN.DQNScheduler"><code class="flex name class">
+<span>class <span class="ident">DQNScheduler</span></span>
+<span>(</span><span>batch_size, exploration_rate, PER_alpha, PER_beta, tau, agent_lr_scheduler_fn=None, n_sgd_updates=None)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
@@ -862,10 +1024,10 @@ At each step it sets the hyperparameter values given by the provided functons</p
 <p><code>PER_beta</code> (<code>function</code>): prioritised experience replay beta scheduler function</p>
 <p><code>tau</code> (<code>function</code>): hard target update time window scheduler function</p>
 <p><code>agent_lr_scheduler_fn</code> (<code>function</code>): multiplicative lr update for actor</p>
-<p><code>sgd_update</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
+<p><code>n_sgd_updates</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
 <details class="source">
 <summary>Source code</summary>
-<pre><code class="python">class DoubleQNetworkScheduler(object):
+<pre><code class="python">class DQNScheduler(object):
   &#34;&#34;&#34;double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
 
@@ -883,7 +1045,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
 
   `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
-  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
 
   &#34;&#34;&#34;
   def __init__(
@@ -894,14 +1056,14 @@ At each step it sets the hyperparameter values given by the provided functons</p
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    sgd_update=None):
+    n_sgd_updates=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.sgd_update_f = sgd_update if sgd_update is not None else lambda t: 1
+    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -914,7 +1076,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.sgd_update = self.sgd_update_f(self.counter)
+    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
 
     self.counter += 1
 
@@ -929,7 +1091,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
 </details>
 <h3>Methods</h3>
 <dl>
-<dt id="rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler.reset"><code class="name flex">
+<dt id="rlmodels.models.DQN.DQNScheduler.reset"><code class="name flex">
 <span>def <span class="ident">reset</span></span>(<span>self)</span>
 </code></dt>
 <dd>
@@ -965,18 +1127,18 @@ At each step it sets the hyperparameter values given by the provided functons</p
 <li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
 <li>
-<h4><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetwork" href="#rlmodels.models.DoubleQNetwork.DoubleQNetwork">DoubleQNetwork</a></code></h4>
+<h4><code><a title="rlmodels.models.DQN.DQN" href="#rlmodels.models.DQN.DQN">DQN</a></code></h4>
 <ul class="">
-<li><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetwork.fit" href="#rlmodels.models.DoubleQNetwork.DoubleQNetwork.fit">fit</a></code></li>
-<li><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetwork.forward" href="#rlmodels.models.DoubleQNetwork.DoubleQNetwork.forward">forward</a></code></li>
-<li><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetwork.play" href="#rlmodels.models.DoubleQNetwork.DoubleQNetwork.play">play</a></code></li>
-<li><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetwork.plot" href="#rlmodels.models.DoubleQNetwork.DoubleQNetwork.plot">plot</a></code></li>
+<li><code><a title="rlmodels.models.DQN.DQN.fit" href="#rlmodels.models.DQN.DQN.fit">fit</a></code></li>
+<li><code><a title="rlmodels.models.DQN.DQN.forward" href="#rlmodels.models.DQN.DQN.forward">forward</a></code></li>
+<li><code><a title="rlmodels.models.DQN.DQN.play" href="#rlmodels.models.DQN.DQN.play">play</a></code></li>
+<li><code><a title="rlmodels.models.DQN.DQN.plot" href="#rlmodels.models.DQN.DQN.plot">plot</a></code></li>
 </ul>
 </li>
 <li>
-<h4><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler" href="#rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler">DoubleQNetworkScheduler</a></code></h4>
+<h4><code><a title="rlmodels.models.DQN.DQNScheduler" href="#rlmodels.models.DQN.DQNScheduler">DQNScheduler</a></code></h4>
 <ul class="">
-<li><code><a title="rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler.reset" href="#rlmodels.models.DoubleQNetwork.DoubleQNetworkScheduler.reset">reset</a></code></li>
+<li><code><a title="rlmodels.models.DQN.DQNScheduler.reset" href="#rlmodels.models.DQN.DQNScheduler.reset">reset</a></code></li>
 </ul>
 </li>
 </ul>

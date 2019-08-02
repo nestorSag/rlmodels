@@ -8,7 +8,7 @@ setuptools.setup(
 
      name='rlmodels',  
 
-     version='1.0.5',
+     version='1.0.6',
 
      author="Nestor Sanchez",
 
@@ -25,7 +25,7 @@ setuptools.setup(
         'numpy',
         'pandas',
         'matplotlib',
-        'seaborn',
+        'seaborn'
 
     ],
 
@@ -45,6 +45,6 @@ setuptools.setup(
 
      ],
 
-     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.5.tar.gz'
+     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.6.tar.gz'
 
  )

@@ -160,6 +160,7 @@ class DDPG(object):
     batch,
     discount_rate,
     sample_weights,
+    td_steps,
     optimise=True):
 
     # return delta = PER weights. if optimise = True, agents are updated in-place
@@ -181,7 +182,7 @@ class DDPG(object):
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
 
-      Y = R.view(-1,1) + discount_rate*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
+      Y = R.view(-1,1) + discount_rate**(td_steps)*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
 
     Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
 
@@ -267,11 +268,9 @@ class DDPG(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `td_steps` (`int`): number of temporal difference steps to use in target
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
-
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -279,7 +278,7 @@ class DDPG(object):
     (`nn.Module`) updated agent
 
     """
-
+    logging.info("Running DDPG.fit")
     if reset:
       self.scheduler.reset()
       self.trace = []
@@ -303,6 +302,7 @@ class DDPG(object):
     step_list = []
     td = 0 #temporal difference step counter
 
+    logging.info("Filling memory...")
     while memsize < max_memory_size:
       # fill step list
       step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
@@ -333,6 +333,7 @@ class DDPG(object):
         s1 = self.env.reset()
 
     # fit agents
+    logging.info("Training...")
     for i in range(n_episodes):
           
       s1 = self.env.reset()
@@ -354,7 +355,7 @@ class DDPG(object):
         if td == td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
           #memory.add(1,td_sarst)
 
@@ -385,7 +386,7 @@ class DDPG(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,optimise=True)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -411,7 +412,7 @@ class DDPG(object):
           # compute temporal difference n-steps SARST and its delta
           if len(step_list) != 0:
             td_sarst = self._process_td_steps(step_list,discount_rate)
-            delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+            delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
             memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
             #memory.add(1,td_sarst)
             td = 0

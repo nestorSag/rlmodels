@@ -3,7 +3,7 @@ import torch
 import torch.optim as optim
 import gym
 
-from rlmodels.models.DoubleQNetwork import *
+from rlmodels.models.DQN import *
 from rlmodels.nets import VanillaNet
 
 import logging
@@ -22,7 +22,7 @@ np.random.seed(1)
 torch.manual_seed(1)
 
 # set hyperparameter runtime schedule as a function of the global number of timesteps
-ddq_scheduler = DoubleQNetworkScheduler(
+dqn_scheduler = DQNScheduler(
 	batch_size = lambda t: 200, #constant
 	exploration_rate = lambda t: max(0.01,0.05 - 0.01*int(t/2500)), #decrease exploration down to 1% after 10,000 steps
 	PER_alpha = lambda t: 1, #constant
@@ -37,11 +37,13 @@ agent_opt = optim.SGD(agent_model.parameters(),lr=agent_lr,weight_decay = 0, mom
 
 agent = Agent(agent_model,agent_opt)
 
-ddq = DoubleQNetwork(agent,env,ddq_scheduler)
+dqn = DQN(agent,env,dqn_scheduler)
 
-ddq.fit(
-	n_episodes=150,
+dqn.fit(
+	n_episodes=140,
 	max_ts_by_episode=max_ep_ts,
 	max_memory_size=2000,
-	td_steps=1,
-	verbose=True)
+	td_steps=1)
+
+dqn.plot()
+dqn.play()

@@ -14,7 +14,7 @@ from .grad_utils import *
 
 import logging
 
-class DoubleQNetworkScheduler(object):
+class DQNScheduler(object):
   """double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
 
@@ -32,7 +32,7 @@ class DoubleQNetworkScheduler(object):
 
   `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
-  `sgd_get_delta` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
 
   """
   def __init__(
@@ -76,7 +76,7 @@ class DoubleQNetworkScheduler(object):
 
     self._step()
 
-class DoubleQNetwork(object):
+class DQN(object):
   """double Q network with importance-sampled prioritised experienced replay (PER)
 
   Parameters:
@@ -85,7 +85,7 @@ class DoubleQNetwork(object):
 
   `env`: environment object with the same interface as OpenAI gym's environments
 
-  `scheduler` (`DoubleQNetworkScheduler`): scheduler object that controls hyperparameter values at runtime
+  `scheduler` (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
 
   """
   def __init__(self,agent,env,scheduler):
@@ -106,6 +106,7 @@ class DoubleQNetwork(object):
     batch,
     discount_rate,
     sample_weights,
+    td_steps,
     optimise=True):
 
     # return delta = PER weights. if optimise = True, agents are updated in-place
@@ -122,7 +123,7 @@ class DoubleQNetwork(object):
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
-      Y = R.view(-1,1) + discount_rate*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
+      Y = R.view(-1,1) + discount_rate**(td_steps)*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
     Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
     
@@ -179,7 +180,6 @@ class DoubleQNetwork(object):
     max_ts_by_episode,
     discount_rate=0.99,
     max_memory_size=2000,
-    verbose = True,
     td_steps = 1,
     reset=False,
     render = False):
@@ -197,9 +197,9 @@ class DoubleQNetwork(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -207,6 +207,7 @@ class DoubleQNetwork(object):
     (`nn.Module`) updated agent
 
     """
+    logging.info("Running DQN.fit")
     if reset:
       self.scheduler.reset()
       self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
@@ -223,6 +224,7 @@ class DoubleQNetwork(object):
     step_list = []
     td = 0 #temporal difference step counter
     s1 = self.env.reset()
+    logging.info("filling memory...")
     while memsize < max_memory_size:
       # fill step list
       step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
@@ -253,6 +255,7 @@ class DoubleQNetwork(object):
         s1 = self.env.reset()
 
     # fit agent
+    logging.info("Training...")
     for i in range(n_episodes):
           
       s1 = self.env.reset()
@@ -274,7 +277,7 @@ class DoubleQNetwork(object):
         if td == td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
           #memory.add(1,td_sarst)
 
@@ -304,7 +307,7 @@ class DoubleQNetwork(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,optimise=True)
+          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
           for k in range(len(delta)):
@@ -326,7 +329,7 @@ class DoubleQNetwork(object):
 
           if len(step_list) != 0:
             td_sarst = self._process_td_steps(step_list,discount_rate)
-            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),optimise=False)
+            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
             memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
             #memory.add(1,td_sarst)
             td = 0

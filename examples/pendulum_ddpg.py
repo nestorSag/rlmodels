@@ -67,3 +67,7 @@ ddpg.fit(
 	max_memory_size=5000,
 	render=False,
 	td_steps=10)
+
+
+ddpg.plot()
+ddpg.play()

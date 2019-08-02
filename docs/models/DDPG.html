@@ -58,7 +58,7 @@ class DDPGScheduler(object):
 
   `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
 
-  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_get_deltas` (`function`): steps between SGD updates as a function of the step counter
 
   &#34;&#34;&#34;
   def __init__(
@@ -70,7 +70,7 @@ class DDPGScheduler(object):
     tau,
     actor_lr_scheduler_fn = None,
     critic_lr_scheduler_fn = None,
-    sgd_update = None):
+    n_sgd_updates = None):
 
     self.batch_size_f = batch_size
     self.exploration_sdev_f = exploration_sdev
@@ -79,7 +79,7 @@ class DDPGScheduler(object):
     self.critic_lr_scheduler_fn = critic_lr_scheduler_fn
     self.actor_lr_scheduler_fn = actor_lr_scheduler_fn
     self.PER_beta_f = PER_beta
-    self.sgd_update_f = sgd_update if sgd_update is None else lambda t: 1
+    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
 
     self.reset()
 
@@ -90,7 +90,7 @@ class DDPGScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.sgd_update = self.sgd_update_f(self.counter)
+    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
 
     self.counter += 1
 
@@ -175,18 +175,19 @@ class DDPG(object):
     if self.scheduler.actor_lr_scheduler_fn is not None:
       self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     actor,
     critic,
     target_actor,
     target_critic,
     batch,
-    discount_rate, 
-    sample_weights):
-    # perform gradient descent on actor and critic 
+    discount_rate,
+    sample_weights,
+    td_steps,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -198,43 +199,45 @@ class DDPG(object):
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
     # calculate critic target
-    critic.model.zero_grad()
+    #critic.model.zero_grad()
     critic.optim.zero_grad()
-    target_critic.model.zero_grad()
+    target_critic.optim.zero_grad()
 
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
 
-      Y = R.view(-1,1) + discount_rate*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
+      Y = R.view(-1,1) + discount_rate**(td_steps)*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
 
     Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
 
     delta = torch.abs(Y_hat-Y).detach().numpy()
     #optimise critic
-    critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    critic.optim.step()
+    if optimise:
+      critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      critic.optim.step()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-        improvement = np.mean(delta) - np.mean(delta2)
-      logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+          improvement = np.mean(delta) - np.mean(delta2)
+        logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+
+    
+    actor.optim.zero_grad()
+    target_actor.optim.zero_grad()
 
     # optimise actor
-    actor.model.zero_grad()
-    target_actor.model.zero_grad()
+    if optimise:
+      q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      q.backward()
+      actor.optim.step()
 
-    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-    q.backward()
-    actor.optim.step()
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+        logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-      logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
-
-    delta = torch.abs(Y_hat-Y).detach().numpy()
     return delta
 
   def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
@@ -255,12 +258,23 @@ class DDPG(object):
 
     return sarst
 
+  def _process_td_steps(self,step_list,discount_rate):
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
+    s0 = step_list[0][0]
+    a = step_list[0][1]
+    R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
+    s1 = step_list[-1][3]
+    t = step_list[-1][4]
+
+    return (s0,a,R,s1,t)
+
   def fit(
     self,
     n_episodes,
     max_ts_by_episode,
     discount_rate=0.99,
     max_memory_size=2000,
+    td_steps=1,
     verbose = True,
     reset=False,
     render=False):
@@ -278,9 +292,9 @@ class DDPG(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -288,7 +302,7 @@ class DDPG(object):
     (`nn.Module`) updated agent
 
     &#34;&#34;&#34;
-
+    logging.info(&#34;Running DDPG.fit&#34;)
     if reset:
       self.scheduler.reset()
       self.trace = []
@@ -308,36 +322,72 @@ class DDPG(object):
     memory = SumTree(max_memory_size)
 
     s1 = self.env.reset()
-    for i in range(max_memory_size):
-      
-      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
-      #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
-      memory.add(1,sarst)
-      if sarst[4] == 0:
+    memsize = 0
+    step_list = []
+    td = 0 #temporal difference step counter
+
+    logging.info(&#34;Filling memory...&#34;)
+    while memsize &lt; max_memory_size:
+      # fill step list
+      step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+      s1 = step_list[-1][3]
+      done = (step_list[-1][4] == 0)
+      td += 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      if done:
+        # compute temporal difference n-steps SARST
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          #calculate sarst delta
+          memory.add(1,td_sarst)
+
+          memsize +=1
+          td = 0
+          step_list = []
+
         s1 = self.env.reset()
-      else:
-        s1 = sarst[3]
 
     # fit agents
+    logging.info(&#34;Training...&#34;)
     for i in range(n_episodes):
           
       s1 = self.env.reset()
 
       ts_reward = 0
+
+      td = 0
+      step_list = []
+
       for j in range(max_ts_by_episode):
 
-        #execute epsilon-greedy policy
-        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
-        s1 = sarst[3] #update current state
-        r = sarst[2]  #get reward
-        done = (sarst[4] == 0) #get termination signal
+        #execute policy
+        step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+        td += 1
+        s1 = step_list[-1][3]
+        r = step_list[-1][2] #latest reward
+        done = (step_list[-1][4] == 0)
 
-        #add to memory
-        #print(&#34;train sarst: {s}&#34;.format(s=sarst))
-        memory.add(1,sarst) #default initial weight of 1
+        if td == td_steps:
+          # compute temporal difference n-steps SARST and its delta
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
+
+          td = 0
+          step_list = []
 
         # sgd update
-        if scheduler.counter % scheduler.sgd_update ==0:
+        for h in range(scheduler.n_sgd_updates):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
@@ -360,10 +410,9 @@ class DDPG(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
-          #print(np.mean(delta))
           for k in range(len(delta)):
             memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
 
@@ -375,7 +424,6 @@ class DDPG(object):
         for layer in critic.model._modules:
           target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
 
-    
         # trace information
         ts_reward += r
 
@@ -385,6 +433,15 @@ class DDPG(object):
         scheduler._step()
 
         if done:
+          # compute temporal difference n-steps SARST and its delta
+          if len(step_list) != 0:
+            td_sarst = self._process_td_steps(step_list,discount_rate)
+            delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+            #memory.add(1,td_sarst)
+            td = 0
+            step_list = []
+
           self.noise_process.reset()
           break
 
@@ -579,18 +636,19 @@ class DDPG(object):
     if self.scheduler.actor_lr_scheduler_fn is not None:
       self.actor.scheduler = optim.lr_scheduler.LambdaLR(self.actor.optim,self.scheduler.actor_lr_scheduler_fn)
 
-  def _update(
+  def _get_delta(
     self,
     actor,
     critic,
     target_actor,
     target_critic,
     batch,
-    discount_rate, 
-    sample_weights):
-    # perform gradient descent on actor and critic 
+    discount_rate,
+    sample_weights,
+    td_steps,
+    optimise=True):
 
-    # return delta = PER weights. agents are updated in-place
+    # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
     sample_weights = (sample_weights**0.5).view(-1,1)
@@ -602,43 +660,45 @@ class DDPG(object):
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
     # calculate critic target
-    critic.model.zero_grad()
+    #critic.model.zero_grad()
     critic.optim.zero_grad()
-    target_critic.model.zero_grad()
+    target_critic.optim.zero_grad()
 
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
 
-      Y = R.view(-1,1) + discount_rate*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
+      Y = R.view(-1,1) + discount_rate**(td_steps)*target_critic.forward(torch.cat((S2,A2),dim=1))*T.view(-1,1) 
 
     Y_hat = critic.forward(torch.cat((S1,A1),dim=1))
 
     delta = torch.abs(Y_hat-Y).detach().numpy()
     #optimise critic
-    critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
-    critic.optim.step()
+    if optimise:
+      critic.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      critic.optim.step()
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
-        delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-        improvement = np.mean(delta) - np.mean(delta2)
-      logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          Y_hat2 = critic.forward(torch.cat((S1,A1),dim=1))
+          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
+          improvement = np.mean(delta) - np.mean(delta2)
+        logging.debug(&#34;Critic mean loss improvement: {x}&#34;.format(x=improvement))
+
+    
+    actor.optim.zero_grad()
+    target_actor.optim.zero_grad()
 
     # optimise actor
-    actor.model.zero_grad()
-    target_actor.model.zero_grad()
+    if optimise:
+      q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+      q.backward()
+      actor.optim.step()
 
-    q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-    q.backward()
-    actor.optim.step()
+      if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
+        with torch.no_grad():
+          q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
+        logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
 
-    if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional debug computations
-      with torch.no_grad():
-        q2 =- torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))
-      logging.debug(&#34;Actor mean Q-improvement: {x}&#34;.format(x=-q2+q))
-
-    delta = torch.abs(Y_hat-Y).detach().numpy()
     return delta
 
   def _step(self,actor, critic, target_actor, target_critic,s1,exploration_sdev,render):
@@ -659,12 +719,23 @@ class DDPG(object):
 
     return sarst
 
+  def _process_td_steps(self,step_list,discount_rate):
+    # takes a list of SARST steps as input and outputs an n-steps TD SARST tuple
+    s0 = step_list[0][0]
+    a = step_list[0][1]
+    R = np.sum([step_list[i][2]*discount_rate**(i) for i in range(len(step_list))])
+    s1 = step_list[-1][3]
+    t = step_list[-1][4]
+
+    return (s0,a,R,s1,t)
+
   def fit(
     self,
     n_episodes,
     max_ts_by_episode,
     discount_rate=0.99,
     max_memory_size=2000,
+    td_steps=1,
     verbose = True,
     reset=False,
     render=False):
@@ -682,9 +753,9 @@ class DDPG(object):
 
     `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+    `td_steps` (`int`): number of temporal difference steps to use in learning
 
-    `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
     `render` (`boolean`): render environment while fitting
 
@@ -692,7 +763,7 @@ class DDPG(object):
     (`nn.Module`) updated agent
 
     &#34;&#34;&#34;
-
+    logging.info(&#34;Running DDPG.fit&#34;)
     if reset:
       self.scheduler.reset()
       self.trace = []
@@ -712,36 +783,72 @@ class DDPG(object):
     memory = SumTree(max_memory_size)
 
     s1 = self.env.reset()
-    for i in range(max_memory_size):
-      
-      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
-      #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
-      memory.add(1,sarst)
-      if sarst[4] == 0:
+    memsize = 0
+    step_list = []
+    td = 0 #temporal difference step counter
+
+    logging.info(&#34;Filling memory...&#34;)
+    while memsize &lt; max_memory_size:
+      # fill step list
+      step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+      s1 = step_list[-1][3]
+      done = (step_list[-1][4] == 0)
+      td += 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
+      if done:
+        # compute temporal difference n-steps SARST
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          #calculate sarst delta
+          memory.add(1,td_sarst)
+
+          memsize +=1
+          td = 0
+          step_list = []
+
         s1 = self.env.reset()
-      else:
-        s1 = sarst[3]
 
     # fit agents
+    logging.info(&#34;Training...&#34;)
     for i in range(n_episodes):
           
       s1 = self.env.reset()
 
       ts_reward = 0
+
+      td = 0
+      step_list = []
+
       for j in range(max_ts_by_episode):
 
-        #execute epsilon-greedy policy
-        sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
-        s1 = sarst[3] #update current state
-        r = sarst[2]  #get reward
-        done = (sarst[4] == 0) #get termination signal
+        #execute policy
+        step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+        td += 1
+        s1 = step_list[-1][3]
+        r = step_list[-1][2] #latest reward
+        done = (step_list[-1][4] == 0)
 
-        #add to memory
-        #print(&#34;train sarst: {s}&#34;.format(s=sarst))
-        memory.add(1,sarst) #default initial weight of 1
+        if td == td_steps:
+          # compute temporal difference n-steps SARST and its delta
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
+
+          td = 0
+          step_list = []
 
         # sgd update
-        if scheduler.counter % scheduler.sgd_update ==0:
+        for h in range(scheduler.n_sgd_updates):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
@@ -764,10 +871,9 @@ class DDPG(object):
           batch_w = torch.from_numpy(batch_w).float()
 
           # perform optimisation
-          delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,td_steps,optimise=True)
 
           #update memory
-          #print(np.mean(delta))
           for k in range(len(delta)):
             memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
 
@@ -779,7 +885,6 @@ class DDPG(object):
         for layer in critic.model._modules:
           target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
 
-    
         # trace information
         ts_reward += r
 
@@ -789,6 +894,15 @@ class DDPG(object):
         scheduler._step()
 
         if done:
+          # compute temporal difference n-steps SARST and its delta
+          if len(step_list) != 0:
+            td_sarst = self._process_td_steps(step_list,discount_rate)
+            delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+            #memory.add(1,td_sarst)
+            td = 0
+            step_list = []
+
           self.noise_process.reset()
           break
 
@@ -850,7 +964,7 @@ class DDPG(object):
 <h3>Methods</h3>
 <dl>
 <dt id="rlmodels.models.DDPG.DDPG.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, verbose=True, reset=False, render=False)</span>
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, td_steps=1, verbose=True, reset=False, render=False)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>Fit the agent </p>
@@ -859,8 +973,8 @@ class DDPG(object):
 <p><code>max_ts_by_episodes</code> (<code>int</code>): maximum number of timesteps to run per episode</p>
 <p><code>discount_rate</code> (<code>float</code>): reward discount rate. Defaults to 0.99</p>
 <p><code>max_memory_size</code> (<code>int</code>): max memory size for PER. Defaults to 2000</p>
-<p><code>verbose</code> (<code>boolean</code>): if true, print mean and max episodic reward each generation. Defaults to True</p>
-<p><code>reset_scheduler</code> (<code>boolean</code>): reset trace and scheduler time counter to zero if fit has been called before</p>
+<p><code>td_steps</code> (<code>int</code>): number of temporal difference steps to use in learning</p>
+<p><code>reset</code> (<code>boolean</code>): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before</p>
 <p><code>render</code> (<code>boolean</code>): render environment while fitting</p>
 <p>Returns:
 (<code>nn.Module</code>) updated agent</p></section>
@@ -872,6 +986,7 @@ class DDPG(object):
   max_ts_by_episode,
   discount_rate=0.99,
   max_memory_size=2000,
+  td_steps=1,
   verbose = True,
   reset=False,
   render=False):
@@ -889,9 +1004,9 @@ class DDPG(object):
 
   `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
 
-  `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
+  `td_steps` (`int`): number of temporal difference steps to use in learning
 
-  `reset_scheduler` (`boolean`): reset trace and scheduler time counter to zero if fit has been called before
+  `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
   `render` (`boolean`): render environment while fitting
 
@@ -899,7 +1014,7 @@ class DDPG(object):
   (`nn.Module`) updated agent
 
   &#34;&#34;&#34;
-
+  logging.info(&#34;Running DDPG.fit&#34;)
   if reset:
     self.scheduler.reset()
     self.trace = []
@@ -919,36 +1034,72 @@ class DDPG(object):
   memory = SumTree(max_memory_size)
 
   s1 = self.env.reset()
-  for i in range(max_memory_size):
-    
-    sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False)
-    #print(&#34;mem fill sarst: {s}&#34;.format(s=sarst))
-    memory.add(1,sarst)
-    if sarst[4] == 0:
+  memsize = 0
+  step_list = []
+  td = 0 #temporal difference step counter
+
+  logging.info(&#34;Filling memory...&#34;)
+  while memsize &lt; max_memory_size:
+    # fill step list
+    step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+    s1 = step_list[-1][3]
+    done = (step_list[-1][4] == 0)
+    td += 1
+    if td == td_steps:
+      # compute temporal difference n-steps SARST
+      td_sarst = self._process_td_steps(step_list,discount_rate)
+      #calculate sarst delta
+      memory.add(1,td_sarst)
+
+      memsize +=1
+      td = 0
+      step_list = []
+
+    if done:
+      # compute temporal difference n-steps SARST
+      if len(step_list) != 0:
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        #calculate sarst delta
+        memory.add(1,td_sarst)
+
+        memsize +=1
+        td = 0
+        step_list = []
+
       s1 = self.env.reset()
-    else:
-      s1 = sarst[3]
 
   # fit agents
+  logging.info(&#34;Training...&#34;)
   for i in range(n_episodes):
         
     s1 = self.env.reset()
 
     ts_reward = 0
+
+    td = 0
+    step_list = []
+
     for j in range(max_ts_by_episode):
 
-      #execute epsilon-greedy policy
-      sarst = self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,render)
-      s1 = sarst[3] #update current state
-      r = sarst[2]  #get reward
-      done = (sarst[4] == 0) #get termination signal
+      #execute policy
+      step_list.append(self._step(actor,critic,target_actor,target_critic,s1,scheduler.exploration_sdev,False))
+      td += 1
+      s1 = step_list[-1][3]
+      r = step_list[-1][2] #latest reward
+      done = (step_list[-1][4] == 0)
 
-      #add to memory
-      #print(&#34;train sarst: {s}&#34;.format(s=sarst))
-      memory.add(1,sarst) #default initial weight of 1
+      if td == td_steps:
+        # compute temporal difference n-steps SARST and its delta
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+        #memory.add(1,td_sarst)
+
+        td = 0
+        step_list = []
 
       # sgd update
-      if scheduler.counter % scheduler.sgd_update ==0:
+      for h in range(scheduler.n_sgd_updates):
         # get replay batch
         P = memory.total()
         N = memory.get_current_size()
@@ -971,10 +1122,9 @@ class DDPG(object):
         batch_w = torch.from_numpy(batch_w).float()
 
         # perform optimisation
-        delta = self._update(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w)
+        delta = self._get_delta(actor,critic,target_actor,target_critic,batch,discount_rate,batch_w,td_steps,optimise=True)
 
         #update memory
-        #print(np.mean(delta))
         for k in range(len(delta)):
           memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
 
@@ -986,7 +1136,6 @@ class DDPG(object):
       for layer in critic.model._modules:
         target_critic.model._modules[layer].weight.data = (1-tau)*target_critic.model._modules[layer].weight.data + tau*critic.model._modules[layer].weight.data
 
-  
       # trace information
       ts_reward += r
 
@@ -996,6 +1145,15 @@ class DDPG(object):
       scheduler._step()
 
       if done:
+        # compute temporal difference n-steps SARST and its delta
+        if len(step_list) != 0:
+          td_sarst = self._process_td_steps(step_list,discount_rate)
+          delta = self._get_delta(actor,critic,target_actor,target_critic,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+          #memory.add(1,td_sarst)
+          td = 0
+          step_list = []
+
         self.noise_process.reset()
         break
 
@@ -1087,7 +1245,7 @@ class DDPG(object):
 </dd>
 <dt id="rlmodels.models.DDPG.DDPGScheduler"><code class="flex name class">
 <span>class <span class="ident">DDPGScheduler</span></span>
-<span>(</span><span>batch_size, exploration_sdev, PER_alpha, PER_beta, tau, actor_lr_scheduler_fn=None, critic_lr_scheduler_fn=None, sgd_update=None)</span>
+<span>(</span><span>batch_size, exploration_sdev, PER_alpha, PER_beta, tau, actor_lr_scheduler_fn=None, critic_lr_scheduler_fn=None, n_sgd_updates=None)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>DDPG hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
@@ -1100,7 +1258,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
 <p><code>tau</code> (<code>function</code>): soft target update combination coefficient</p>
 <p><code>actor_lr_scheduler_func</code> (<code>function</code>): multiplicative lr update for actor</p>
 <p><code>critic_lr_scheduler_func</code> (<code>function</code>): multiplicative lr update for critic</p>
-<p><code>sgd_update</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
+<p><code>n_sgd_get_deltas</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class DDPGScheduler(object):
@@ -1123,7 +1281,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
 
   `critic_lr_scheduler_func` (`function`): multiplicative lr update for critic
 
-  `sgd_update` (`function`): steps between SGD updates as a function of the step counter
+  `n_sgd_get_deltas` (`function`): steps between SGD updates as a function of the step counter
 
   &#34;&#34;&#34;
   def __init__(
@@ -1135,7 +1293,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
     tau,
     actor_lr_scheduler_fn = None,
     critic_lr_scheduler_fn = None,
-    sgd_update = None):
+    n_sgd_updates = None):
 
     self.batch_size_f = batch_size
     self.exploration_sdev_f = exploration_sdev
@@ -1144,7 +1302,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
     self.critic_lr_scheduler_fn = critic_lr_scheduler_fn
     self.actor_lr_scheduler_fn = actor_lr_scheduler_fn
     self.PER_beta_f = PER_beta
-    self.sgd_update_f = sgd_update if sgd_update is None else lambda t: 1
+    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
 
     self.reset()
 
@@ -1155,7 +1313,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.sgd_update = self.sgd_update_f(self.counter)
+    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
 
     self.counter += 1
 

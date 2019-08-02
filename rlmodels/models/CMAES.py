@@ -180,9 +180,7 @@ class CMAES(object):
       individuals_by_gen=20,
       episodes_by_ind=10,
       max_ts_by_episode=200,
-      verbose=True,
-      reset=False,
-      debug_logger=False):
+      reset=False):
 
     """Fit the agent 
   
@@ -190,7 +188,7 @@ class CMAES(object):
     
     `weight_func` (`function`): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on `numpy` arrays; defaults to quadratic function
 
-    `objective reward` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
+    `reward_objective` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
 
     `n_generations` (`int`): maximum number of generations to run. Defaults to 100
 
@@ -200,22 +198,12 @@ class CMAES(object):
 
     `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode. Defaults to 200
 
-    `verbose` (`boolean`): if true, print mean and max episodic reward each generation. Defaults to True
-
     `reset` (`boolean`): reset scheduler counter to zero and performance traces if `fit` has been called before
-
   
     Returns: 
     (`torch nn.Module`) best-performing agent from last generation
 
     """
-
-    if debug_logger:
-      logging.basicConfig(level=logging.DEBUG)
-    else:
-      logging.basicConfig(level=logging.INFO)
-
-
     if reset:
       self.scheduler.reset()
       self.mean_trace = []
