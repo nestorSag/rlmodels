@@ -10,7 +10,7 @@ import torch.optim as optim
 import itertools
 
 class VanillaNet(nn.Module):
-  """neural network with variale number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
+  """neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
   
   Parameters: 
 
@@ -46,3 +46,4 @@ class VanillaNet(nn.Module):
     else:
       x = self.final_activation(getattr(self,"linear{n}".format(n=self.n_hidden_layers))(x))
     return x
+

@@ -307,7 +307,8 @@ class CMAES(object):
         "value": self.max_trace + self.mean_trace,
         "trace": ["max" for x in self.max_trace] + ["mean" for x in self.mean_trace]})
 
-      sns.lineplot(data=df,x="generation",y="value",hue="trace")
+      ax = sns.lineplot(data=df,x="generation",y="value",hue="trace")
+      ax.set(xlabel='generation', ylabel='Mean timestep reward')
       plt.show()
 
   def play(self,n=200):

@@ -69,7 +69,7 @@ dqn_scheduler = DQNScheduler(
 	PER_beta = lambda t: 1, #constant
 	tau = lambda t: 100, #constant
 	agent_lr_scheduler_fn = lambda t: 1.25**(-int(t/2500)), #decrease step size every 2,500 steps,
-	n_sgd_updates = lambda t: 1) #constant
+	steps_per_update = lambda t: 1) #constant
 
 agent_lr = 0.5 #initial learning rate
 agent_model = VanillaNet([60],4,2,None)

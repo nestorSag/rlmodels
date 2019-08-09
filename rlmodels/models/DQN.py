@@ -10,6 +10,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+from collections import deque
+
 from .grad_utils import *
 
 import logging
@@ -32,7 +34,7 @@ class DQNScheduler(object):
 
   `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
 
-  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
+  `steps_per_update` (`function`): number of SGD steps per update
 
   """
   def __init__(
@@ -43,14 +45,14 @@ class DQNScheduler(object):
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    n_sgd_updates=None):
+    steps_per_update=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
+    self.steps_per_update_f = steps_per_update if steps_per_update is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -63,7 +65,7 @@ class DQNScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
+    self.steps_per_update = self.steps_per_update_f(self.counter)
 
     self.counter += 1
 
@@ -112,7 +114,7 @@ class DQN(object):
     # return delta = PER weights. if optimise = True, agents are updated in-place
     batch_size = len(batch)
 
-    sample_weights = (sample_weights**0.5).view(-1,1)
+    sqrt_sample_weights = (sample_weights**0.5).view(-1,1) # importance sampling weights
     #process batch
     S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
     A1 = torch.from_numpy(np.array([x[1] for x in batch])).long()
@@ -131,7 +133,7 @@ class DQN(object):
 
     if optimise:
       #optimise
-      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      agent1.loss(sqrt_sample_weights*Y_hat, sqrt_sample_weights*Y).backward() #weighted loss
       agent1.optim.step()
 
       if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
@@ -220,39 +222,34 @@ class DQN(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
-    memsize = 0
-    step_list = []
-    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    logging.info("filling memory...")
+    memsize = 0
+    step_list = deque(maxlen=td_steps)
+    td = 0 #temporal difference step counter
+
+    logging.info("Filling memory...")
     while memsize < max_memory_size:
       # fill step list
       step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
       s1 = step_list[-1][3]
       done = (step_list[-1][4] == 0)
       td += 1
-      if td == td_steps:
+      if td >= td_steps:
         # compute temporal difference n-steps SARST
         td_sarst = self._process_td_steps(step_list,discount_rate)
-        #calculate sarst delta
         memory.add(1,td_sarst)
-
         memsize +=1
-        td = 0
-        step_list = []
 
       if done:
-        # compute temporal difference n-steps SARST
-        if len(step_list) != 0:
+        if td < td_steps:
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          #calculate sarst delta
           memory.add(1,td_sarst)
-
           memsize +=1
-          td = 0
-          step_list = []
-
+        # compute temporal difference n-steps SARST
+        td = 0
+        step_list = deque(maxlen=td_steps)
         s1 = self.env.reset()
+
 
     # fit agent
     logging.info("Training...")
@@ -263,34 +260,35 @@ class DQN(object):
       ts_reward = 0
 
       td = 0
-      step_list = []
+      step_list = deque(maxlen=td_steps)
 
       for j in range(max_ts_by_episode):
 
         #execute policy
-        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,render))
         td += 1
         s1 = step_list[-1][3]
         r = step_list[-1][2] #latest reward
         done = (step_list[-1][4] == 0)
 
-        if td == td_steps:
+        if td >= td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
           delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-          #memory.add(1,td_sarst)
-
-          td = 0
-          step_list = []
 
         # sgd update
-        for h in range(scheduler.n_sgd_updates):
+        for h in range(scheduler.steps_per_update):
           # get replay batch
           P = memory.total()
           N = memory.get_current_size()
 
-          samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+          try:
+            samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+          except OverflowError as e:
+            print(e)
+            print("it seems that the model parameters are diverging. Decreasing step size or increasing tau might help.")
+
           batch = []
           batch_ids = []
           batch_p = []
@@ -326,14 +324,10 @@ class DQN(object):
         scheduler._step()
 
         if done:
-
-          if len(step_list) != 0:
+          if td < td_steps:
             td_sarst = self._process_td_steps(step_list,discount_rate)
             delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
             memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-            #memory.add(1,td_sarst)
-            td = 0
-            step_list = []
 
           break
 
@@ -344,7 +338,7 @@ class DQN(object):
       self.env.close()
 
   def plot(self):
-    """plot mean episodic reward from last `fit` call
+    """plot mean timestep reward from last `fit` call
 
     """
 
@@ -353,9 +347,9 @@ class DQN(object):
     else:
       df = pd.DataFrame({
         "episode":list(range(len(self.mean_trace))),
-        "mean reward": self.mean_trace})
+        "mean_reward": self.mean_trace})
 
-    sns.lineplot(data=df,x="episode",y="mean reward")
+    sns.lineplot(data=df,x="episode",y="mean_reward")
     plt.show()
 
   def play(self,n=200):

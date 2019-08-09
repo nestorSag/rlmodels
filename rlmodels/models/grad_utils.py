@@ -83,7 +83,9 @@ class SumTree:
     change = p - self.tree[idx]
 
     self.tree[idx] = p
-    self._propagate(idx, change)
+    
+    if self.capacity > 1:
+      self._propagate(idx, change)
 
   def get(self, s):
     """get leaf corresponding to numeric value
@@ -126,3 +128,39 @@ class Agent(object):
   def step(self):
     if self.scheduler is not None:
       self.scheduler.step()
+
+  def get_action_dist(self,s):
+    return self.model.get_action_dist(s)
+
+class FormattedActionEnv(object):
+  """environment wrapper that formats a model output action to gym environment's required format
+  
+  Parameters:
+
+  `env` : environment with the same interface as in gym library
+
+  `action_map` (`function`): mapper that takes a model output and formats it to the environment's standard input type
+
+  """
+  def __init__(self,env,action_map):
+    self.env = env
+    self.action_space = self.env.action_space
+    self.observation_space = self.env.observation_space
+    self.action_map = action_map
+
+  def step(self,a):
+    a = self.action_map(a)
+    s,r,done,info = self.env.step(a)
+    return s,r,done,info
+
+  def render(self):
+
+    self.env.render()
+  def close(self):
+    self.env.close()
+
+  def reset(self):
+    self.env.reset()
+
+  def seed(self,seed):
+    self.env.seed(seed)
