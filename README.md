@@ -1,6 +1,6 @@
-# rlmodels: a ACment learning library
+# rlmodels: a reinforcement learning library
 
-This project is a collection of some popular optimisation algorithms for ACment learning problem. At the moment the available models are:
+This project is a collection of some popular optimisation algorithms for reinforcement learning problem. At the moment the available models are:
 
 * DQN
 * DDPG
