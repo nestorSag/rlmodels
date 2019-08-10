@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.6.3" />
-<title>rlmodels.models API documentation</title>
+<title>rlmodels.nets.ContinuousPolicy API documentation</title>
 <meta name="description" content="" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
@@ -17,49 +17,131 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Module <code>rlmodels.models</code></h1>
+<h1 class="title">Module <code>rlmodels.nets.ContinuousPolicy</code></h1>
 </header>
 <section id="section-intro">
 <details class="source">
 <summary>Source code</summary>
-<pre><code class="python">#__init__.py
-from .DQN import *
-from .DDPG import *
-from .CMAES import *
-from .AC import *
-from .grad_utils import *</code></pre>
+<pre><code class="python">import numpy as np
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.distributions.normal as normal
+from .VanillaNet import VanillaNet
+
+class ContinuousPolicy(VanillaNet):
+  &#34;&#34;&#34; continuous policy network where each action component is normally distributed with no correlation between components.
+  Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.normal.Normal` instance.
+  
+  **Parameters**: 
+
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
+
+  *input_size* (*int*): state dimension
+
+  *output_size* (*int*): action dimension 
+
+  *activation_fn* (*function*): activation function for the mean
+
+  *min_sd* (*float*): minimum standard deviation value
+
+  &#34;&#34;&#34;
+  def __init__(self,layer_sizes,input_size,output_size,mean_activation_fn,min_sd=1e-1):
+
+    super(ContinuousPolicy,self).__init__(layer_sizes,input_size,2*output_size,None)
+    self.d = output_size
+    self.mean_activation_fn = mean_activation_fn
+    self.min_sd=min_sd
+
+  def forward(self,x):
+    x = super(ContinuousPolicy,self).forward(x)
+
+    if len(x.shape) &gt; 1:
+      mean = self.mean_activation_fn(x[:,0:self.d])
+      sd = torch.exp(x[:,self.d:(2*self.d)])
+    else:
+      mean = self.mean_activation_fn(x[0:self.d])
+      sd = torch.exp(x[self.d:(2*self.d)])
+
+    return normal.Normal(mean,torch.clamp(sd,min=self.min_sd,max=np.Inf))</code></pre>
 </details>
 </section>
 <section>
-<h2 class="section-title" id="header-submodules">Sub-modules</h2>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt><code class="name"><a title="rlmodels.models.AC" href="AC.html">rlmodels.models.AC</a></code></dt>
+<dt id="rlmodels.nets.ContinuousPolicy.ContinuousPolicy"><code class="flex name class">
+<span>class <span class="ident">ContinuousPolicy</span></span>
+<span>(</span><span>layer_sizes, input_size, output_size, mean_activation_fn, min_sd=0.1)</span>
+</code></dt>
 <dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.CMAES" href="CMAES.html">rlmodels.models.CMAES</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.DDPG" href="DDPG.html">rlmodels.models.DDPG</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.DQN" href="DQN.html">rlmodels.models.DQN</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.grad_utils" href="grad_utils.html">rlmodels.models.grad_utils</a></code></dt>
-<dd>
-<section class="desc"></section>
+<section class="desc"><p>continuous policy network where each action component is normally distributed with no correlation between components.
+Hidden layers have ReLU activation by default. The <code>forward</code> method returns a <code>torch.distributions.normal.Normal</code> instance.</p>
+<p><strong>Parameters</strong>: </p>
+<p><em>layer_sizes</em> (<em>list</em> of <em>int</em>s): list with hidden layer sizes </p>
+<p><em>input_size</em> (<em>int</em>): state dimension</p>
+<p><em>output_size</em> (<em>int</em>): action dimension </p>
+<p><em>activation_fn</em> (<em>function</em>): activation function for the mean</p>
+<p><em>min_sd</em> (<em>float</em>): minimum standard deviation value</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class ContinuousPolicy(VanillaNet):
+  &#34;&#34;&#34; continuous policy network where each action component is normally distributed with no correlation between components.
+  Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.normal.Normal` instance.
+  
+  **Parameters**: 
+
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
+
+  *input_size* (*int*): state dimension
+
+  *output_size* (*int*): action dimension 
+
+  *activation_fn* (*function*): activation function for the mean
+
+  *min_sd* (*float*): minimum standard deviation value
+
+  &#34;&#34;&#34;
+  def __init__(self,layer_sizes,input_size,output_size,mean_activation_fn,min_sd=1e-1):
+
+    super(ContinuousPolicy,self).__init__(layer_sizes,input_size,2*output_size,None)
+    self.d = output_size
+    self.mean_activation_fn = mean_activation_fn
+    self.min_sd=min_sd
+
+  def forward(self,x):
+    x = super(ContinuousPolicy,self).forward(x)
+
+    if len(x.shape) &gt; 1:
+      mean = self.mean_activation_fn(x[:,0:self.d])
+      sd = torch.exp(x[:,self.d:(2*self.d)])
+    else:
+      mean = self.mean_activation_fn(x[0:self.d])
+      sd = torch.exp(x[self.d:(2*self.d)])
+
+    return normal.Normal(mean,torch.clamp(sd,min=self.min_sd,max=np.Inf))</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="rlmodels.nets.VanillaNet.VanillaNet" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet">VanillaNet</a></li>
+<li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="rlmodels.nets.VanillaNet.VanillaNet" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet">VanillaNet</a></b></code>:
+<ul class="hlist">
+<li><code><a title="rlmodels.nets.VanillaNet.VanillaNet.forward" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet.forward">forward</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 </dl>
-</section>
-<section>
-</section>
-<section>
-</section>
-<section>
 </section>
 </article>
 <nav id="sidebar">
@@ -70,16 +152,14 @@ from .grad_utils import *</code></pre>
 <ul id="index">
 <li><h3>Super-module</h3>
 <ul>
-<li><code><a title="rlmodels" href="../index.html">rlmodels</a></code></li>
+<li><code><a title="rlmodels.nets" href="index.html">rlmodels.nets</a></code></li>
 </ul>
 </li>
-<li><h3><a href="#header-submodules">Sub-modules</a></h3>
+<li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
-<li><code><a title="rlmodels.models.AC" href="AC.html">rlmodels.models.AC</a></code></li>
-<li><code><a title="rlmodels.models.CMAES" href="CMAES.html">rlmodels.models.CMAES</a></code></li>
-<li><code><a title="rlmodels.models.DDPG" href="DDPG.html">rlmodels.models.DDPG</a></code></li>
-<li><code><a title="rlmodels.models.DQN" href="DQN.html">rlmodels.models.DQN</a></code></li>
-<li><code><a title="rlmodels.models.grad_utils" href="grad_utils.html">rlmodels.models.grad_utils</a></code></li>
+<li>
+<h4><code><a title="rlmodels.nets.ContinuousPolicy.ContinuousPolicy" href="#rlmodels.nets.ContinuousPolicy.ContinuousPolicy">ContinuousPolicy</a></code></h4>
+</li>
 </ul>
 </li>
 </ul>

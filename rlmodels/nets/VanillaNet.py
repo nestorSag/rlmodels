@@ -12,15 +12,15 @@ import itertools
 class VanillaNet(nn.Module):
   """neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
   
-  Parameters: 
+  **Parameters**: 
 
-  `layer_sizes` (`list` of `int`s): list with hidden layer sizes 
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
 
-  `input_size` (`int`): input size 
+  *input_size* (*int*): input size 
 
-  `output_size` (`int`): output size 
+  *output_size* (*int*): output size 
 
-  `final_activation` (`int`): torch activation function for output layer. Can be None
+  *final_activation* (*function*): torch activation function for output layer. Can be `None`
 
   """
 

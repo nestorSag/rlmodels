@@ -31,9 +31,9 @@ class SumTree:
 
   source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
   
-  Parameters:
+  **Parameters**:
 
-  `capacity` (`int`): number of tree leaves
+  *capacity* (*int*): number of tree leaves
 
   &#34;&#34;&#34;
   write = 0
@@ -41,7 +41,7 @@ class SumTree:
 
   def __init__(self, capacity):
     # INPUT
-    # `capacity`: number of tree leaves
+    # *capacity*: number of tree leaves
     self.capacity = capacity
     self.tree = np.zeros( 2*capacity - 1 )
     self.data = np.zeros( capacity, dtype=object )
@@ -76,11 +76,13 @@ class SumTree:
     return self.tree[0]
 
   def add(self, p, data):
-    &#34;&#34;&#34;adds data to tree, potetntially overwritting older data
+    &#34;&#34;&#34;adds data to tree, potentially overwritting older data
   
-    Parameters:
-    `p` (`float`): leaf weight
-    `data`: leaf data
+    **Parameters**:
+
+    *p* (*float*): leaf weight
+
+    *data*: leaf data
     &#34;&#34;&#34;
   
     idx = self.write + self.capacity - 1
@@ -97,28 +99,30 @@ class SumTree:
   def update(self, idx, p):
     &#34;&#34;&#34;updates leaf weight
     
-    Parameters:
+    **Parameters**:
 
-    `idx` (`int`): leaf index
+    *idx* (*int*): leaf index
     
-    `p` (`float`): new weight
+    *p* (*float*): new weight
 
     &#34;&#34;&#34;
     change = p - self.tree[idx]
 
     self.tree[idx] = p
-    self._propagate(idx, change)
+    
+    if self.capacity &gt; 1:
+      self._propagate(idx, change)
 
   def get(self, s):
     &#34;&#34;&#34;get leaf corresponding to numeric value
     
-    Parameters
+    **Parameters**:
 
-    `s` (`float`): numeric value
+    *s* (*float*): numeric value
 
-    Returns:
+    **Returns**:
 
-    triplet with leaf id (`int`), tree node id (`int`) and  leaf data
+    triplet with leaf id (*int*), tree node id (*int*) and  leaf data
     &#34;&#34;&#34;
 
     idx = self._retrieve(0, s)
@@ -129,11 +133,11 @@ class SumTree:
 class Agent(object):
   &#34;&#34;&#34;neural network gradient optimisation wrapper
   
-  Parameters:
+  **Parameters**:
 
-  `model` (`torch.nn.Module`): Pytorch neural network model
+  *model* (*torch.nn.Module*): Pytorch neural network model
 
-  `optim_` (`torch.optim`): Pytorch optimizer object 
+  *opt* (*torch.optim*): Pytorch optimizer object 
 
   &#34;&#34;&#34;
   
@@ -143,13 +147,54 @@ class Agent(object):
     self.scheduler = None
 
   def forward(self,x):
+    &#34;&#34;&#34; Apply *model*&#39;s  *forward* method to input
+
+    **Parameters**:
+
+    *x* (*torch.Tensor*): state tensor
+
+    &#34;&#34;&#34;
+
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
     return self.model.forward(x)
 
-  def step(self):
+  def _step(self):
     if self.scheduler is not None:
-      self.scheduler.step()</code></pre>
+      self.scheduler.step()
+
+# class FormattedActionEnv(object):
+#   &#34;&#34;&#34;environment wrapper that formats a model output action to gym environment&#39;s required format
+  
+#   Parameters:
+
+#   *env* : environment with the same interface as in gym library
+
+#   *action_map* (*function*): mapper that takes a model output and formats it to the environment&#39;s standard input type
+
+#   &#34;&#34;&#34;
+#   def __init__(self,env,action_map):
+#     self.env = env
+#     self.action_space = self.env.action_space
+#     self.observation_space = self.env.observation_space
+#     self.action_map = action_map
+
+#   def step(self,a):
+#     a = self.action_map(a)
+#     s,r,done,info = self.env.step(a)
+#     return s,r,done,info
+
+#   def render(self):
+
+#     self.env.render()
+#   def close(self):
+#     self.env.close()
+
+#   def reset(self):
+#     self.env.reset()
+
+#   def seed(self,seed):
+#     self.env.seed(seed)</code></pre>
 </details>
 </section>
 <section>
@@ -167,19 +212,19 @@ class Agent(object):
 </code></dt>
 <dd>
 <section class="desc"><p>neural network gradient optimisation wrapper</p>
-<p>Parameters:</p>
-<p><code>model</code> (<code>torch.nn.Module</code>): Pytorch neural network model</p>
-<p><code>optim_</code> (<code>torch.optim</code>): Pytorch optimizer object</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>model</em> (<em>torch.nn.Module</em>): Pytorch neural network model</p>
+<p><em>opt</em> (<em>torch.optim</em>): Pytorch optimizer object</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class Agent(object):
   &#34;&#34;&#34;neural network gradient optimisation wrapper
   
-  Parameters:
+  **Parameters**:
 
-  `model` (`torch.nn.Module`): Pytorch neural network model
+  *model* (*torch.nn.Module*): Pytorch neural network model
 
-  `optim_` (`torch.optim`): Pytorch optimizer object 
+  *opt* (*torch.optim*): Pytorch optimizer object 
 
   &#34;&#34;&#34;
   
@@ -189,11 +234,19 @@ class Agent(object):
     self.scheduler = None
 
   def forward(self,x):
+    &#34;&#34;&#34; Apply *model*&#39;s  *forward* method to input
+
+    **Parameters**:
+
+    *x* (*torch.Tensor*): state tensor
+
+    &#34;&#34;&#34;
+
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
     return self.model.forward(x)
 
-  def step(self):
+  def _step(self):
     if self.scheduler is not None:
       self.scheduler.step()</code></pre>
 </details>
@@ -203,25 +256,24 @@ class Agent(object):
 <span>def <span class="ident">forward</span></span>(<span>self, x)</span>
 </code></dt>
 <dd>
-<section class="desc"></section>
+<section class="desc"><p>Apply <em>model</em>'s
+<em>forward</em> method to input</p>
+<p><strong>Parameters</strong>:</p>
+<p><em>x</em> (<em>torch.Tensor</em>): state tensor</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def forward(self,x):
+  &#34;&#34;&#34; Apply *model*&#39;s  *forward* method to input
+
+  **Parameters**:
+
+  *x* (*torch.Tensor*): state tensor
+
+  &#34;&#34;&#34;
+
   if isinstance(x,np.ndarray):
     x = torch.from_numpy(x).float()
   return self.model.forward(x)</code></pre>
-</details>
-</dd>
-<dt id="rlmodels.models.grad_utils.Agent.step"><code class="name flex">
-<span>def <span class="ident">step</span></span>(<span>self)</span>
-</code></dt>
-<dd>
-<section class="desc"></section>
-<details class="source">
-<summary>Source code</summary>
-<pre><code class="python">def step(self):
-  if self.scheduler is not None:
-    self.scheduler.step()</code></pre>
 </details>
 </dd>
 </dl>
@@ -233,8 +285,8 @@ class Agent(object):
 <dd>
 <section class="desc"><p>efficient memory data sctructure class (fast retrieves and updates).</p>
 <p>source of the SumTree class code : <a href="https://github.com/jaromiru/AI-blog/blob/master/SumTree.py">https://github.com/jaromiru/AI-blog/blob/master/SumTree.py</a></p>
-<p>Parameters:</p>
-<p><code>capacity</code> (<code>int</code>): number of tree leaves</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>capacity</em> (<em>int</em>): number of tree leaves</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class SumTree:
@@ -242,9 +294,9 @@ class Agent(object):
 
   source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
   
-  Parameters:
+  **Parameters**:
 
-  `capacity` (`int`): number of tree leaves
+  *capacity* (*int*): number of tree leaves
 
   &#34;&#34;&#34;
   write = 0
@@ -252,7 +304,7 @@ class Agent(object):
 
   def __init__(self, capacity):
     # INPUT
-    # `capacity`: number of tree leaves
+    # *capacity*: number of tree leaves
     self.capacity = capacity
     self.tree = np.zeros( 2*capacity - 1 )
     self.data = np.zeros( capacity, dtype=object )
@@ -287,11 +339,13 @@ class Agent(object):
     return self.tree[0]
 
   def add(self, p, data):
-    &#34;&#34;&#34;adds data to tree, potetntially overwritting older data
+    &#34;&#34;&#34;adds data to tree, potentially overwritting older data
   
-    Parameters:
-    `p` (`float`): leaf weight
-    `data`: leaf data
+    **Parameters**:
+
+    *p* (*float*): leaf weight
+
+    *data*: leaf data
     &#34;&#34;&#34;
   
     idx = self.write + self.capacity - 1
@@ -308,28 +362,30 @@ class Agent(object):
   def update(self, idx, p):
     &#34;&#34;&#34;updates leaf weight
     
-    Parameters:
+    **Parameters**:
 
-    `idx` (`int`): leaf index
+    *idx* (*int*): leaf index
     
-    `p` (`float`): new weight
+    *p* (*float*): new weight
 
     &#34;&#34;&#34;
     change = p - self.tree[idx]
 
     self.tree[idx] = p
-    self._propagate(idx, change)
+    
+    if self.capacity &gt; 1:
+      self._propagate(idx, change)
 
   def get(self, s):
     &#34;&#34;&#34;get leaf corresponding to numeric value
     
-    Parameters
+    **Parameters**:
 
-    `s` (`float`): numeric value
+    *s* (*float*): numeric value
 
-    Returns:
+    **Returns**:
 
-    triplet with leaf id (`int`), tree node id (`int`) and  leaf data
+    triplet with leaf id (*int*), tree node id (*int*) and  leaf data
     &#34;&#34;&#34;
 
     idx = self._retrieve(0, s)
@@ -354,18 +410,20 @@ class Agent(object):
 <span>def <span class="ident">add</span></span>(<span>self, p, data)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>adds data to tree, potetntially overwritting older data</p>
-<p>Parameters:
-<code>p</code> (<code>float</code>): leaf weight
-<code>data</code>: leaf data</p></section>
+<section class="desc"><p>adds data to tree, potentially overwritting older data</p>
+<p><strong>Parameters</strong>:</p>
+<p><em>p</em> (<em>float</em>): leaf weight</p>
+<p><em>data</em>: leaf data</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def add(self, p, data):
-  &#34;&#34;&#34;adds data to tree, potetntially overwritting older data
+  &#34;&#34;&#34;adds data to tree, potentially overwritting older data
 
-  Parameters:
-  `p` (`float`): leaf weight
-  `data`: leaf data
+  **Parameters**:
+
+  *p* (*float*): leaf weight
+
+  *data*: leaf data
   &#34;&#34;&#34;
 
   idx = self.write + self.capacity - 1
@@ -385,23 +443,23 @@ class Agent(object):
 </code></dt>
 <dd>
 <section class="desc"><p>get leaf corresponding to numeric value</p>
-<p>Parameters</p>
-<p><code>s</code> (<code>float</code>): numeric value</p>
-<p>Returns:</p>
-<p>triplet with leaf id (<code>int</code>), tree node id (<code>int</code>) and
+<p><strong>Parameters</strong>:</p>
+<p><em>s</em> (<em>float</em>): numeric value</p>
+<p><strong>Returns</strong>:</p>
+<p>triplet with leaf id (<em>int</em>), tree node id (<em>int</em>) and
 leaf data</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def get(self, s):
   &#34;&#34;&#34;get leaf corresponding to numeric value
   
-  Parameters
+  **Parameters**:
 
-  `s` (`float`): numeric value
+  *s* (*float*): numeric value
 
-  Returns:
+  **Returns**:
 
-  triplet with leaf id (`int`), tree node id (`int`) and  leaf data
+  triplet with leaf id (*int*), tree node id (*int*) and  leaf data
   &#34;&#34;&#34;
 
   idx = self._retrieve(0, s)
@@ -439,25 +497,27 @@ leaf data</p></section>
 </code></dt>
 <dd>
 <section class="desc"><p>updates leaf weight</p>
-<p>Parameters:</p>
-<p><code>idx</code> (<code>int</code>): leaf index</p>
-<p><code>p</code> (<code>float</code>): new weight</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>idx</em> (<em>int</em>): leaf index</p>
+<p><em>p</em> (<em>float</em>): new weight</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def update(self, idx, p):
   &#34;&#34;&#34;updates leaf weight
   
-  Parameters:
+  **Parameters**:
 
-  `idx` (`int`): leaf index
+  *idx* (*int*): leaf index
   
-  `p` (`float`): new weight
+  *p* (*float*): new weight
 
   &#34;&#34;&#34;
   change = p - self.tree[idx]
 
   self.tree[idx] = p
-  self._propagate(idx, change)</code></pre>
+  
+  if self.capacity &gt; 1:
+    self._propagate(idx, change)</code></pre>
 </details>
 </dd>
 </dl>
@@ -482,7 +542,6 @@ leaf data</p></section>
 <h4><code><a title="rlmodels.models.grad_utils.Agent" href="#rlmodels.models.grad_utils.Agent">Agent</a></code></h4>
 <ul class="">
 <li><code><a title="rlmodels.models.grad_utils.Agent.forward" href="#rlmodels.models.grad_utils.Agent.forward">forward</a></code></li>
-<li><code><a title="rlmodels.models.grad_utils.Agent.step" href="#rlmodels.models.grad_utils.Agent.step">step</a></code></li>
 </ul>
 </li>
 <li>

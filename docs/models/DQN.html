@@ -34,6 +34,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
+from collections import deque
+
 from .grad_utils import *
 
 import logging
@@ -42,21 +44,21 @@ class DQNScheduler(object):
   &#34;&#34;&#34;double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
 
-  Parameters:
+  **Parameters**:
   
-  `batch_size_f` (`function`): batch size scheduler function
+  *batch_size_f* (*function*): batch size scheduler function
 
-  `exploration_rate` (`function`): exploration rate scheduler function 
+  *exploration_rate* (*function*): exploration rate scheduler function 
 
-  `PER_alpha` (`function`): prioritised experience replay alpha scheduler function
+  *PER_alpha* (*function*): prioritised experience replay alpha scheduler function
 
-  `PER_beta` (`function`): prioritised experience replay beta scheduler function
+  *PER_beta* (*function*): prioritised experience replay beta scheduler function
 
-  `tau` (`function`): hard target update time window scheduler function
+  *tau* (*function*): hard target update time window scheduler function
 
-  `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
+  *agent_lr_scheduler_fn* (*function*): multiplicative lr update for actor
 
-  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
+  *steps_per_update* (*function*): number of SGD steps per update
 
   &#34;&#34;&#34;
   def __init__(
@@ -67,14 +69,14 @@ class DQNScheduler(object):
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    n_sgd_updates=None):
+    steps_per_update=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
+    self.steps_per_update_f = steps_per_update if steps_per_update is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -87,7 +89,7 @@ class DQNScheduler(object):
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
+    self.steps_per_update = self.steps_per_update_f(self.counter)
 
     self.counter += 1
 
@@ -103,19 +105,18 @@ class DQNScheduler(object):
 class DQN(object):
   &#34;&#34;&#34;double Q network with importance-sampled prioritised experienced replay (PER)
 
-  Parameters:
+  **Parameters**:
 
-  `agent` (`rlmodels.models.Agent`): agent model wrapper
+  *agent* (`rlmodels.models.grad_utils.Agent`): model wrapper
 
-  `env`: environment object with the same interface as OpenAI gym&#39;s environments
+  *env*: environment object with the same interface as OpenAI gym&#39;s environments
 
-  `scheduler` (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
+  *scheduler* (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   def __init__(self,agent,env,scheduler):
 
     self.agent = agent
-    self.agent.loss = nn.MSELoss()
     self.env = env
     self.scheduler = scheduler
     self.mean_trace = []
@@ -133,10 +134,6 @@ class DQN(object):
     td_steps,
     optimise=True):
 
-    # return delta = PER weights. if optimise = True, agents are updated in-place
-    batch_size = len(batch)
-
-    sample_weights = (sample_weights**0.5).view(-1,1)
     #process batch
     S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
     A1 = torch.from_numpy(np.array([x[1] for x in batch])).long()
@@ -144,29 +141,26 @@ class DQN(object):
     S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
+    agent1.optim.zero_grad()
+
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
       Y = R.view(-1,1) + discount_rate**(td_steps)*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
-    Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
+    delta = Y - agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
     
-    delta = torch.abs(Y_hat-Y).detach().numpy()
-
     if optimise:
       #optimise
-      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      (sample_weights.view(-1,1)*delta**2).mean().backward()
       agent1.optim.step()
 
       if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
         with torch.no_grad():
-          Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
-          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
+          delta2 = Y - agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
+        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=torch.abs(delta).mean()-torch.abs(delta2).mean()))
 
-    agent1.optim.zero_grad()
-
-    return delta
+    return torch.abs(delta).detach().numpy()
 
   def _step(self,agent,target,s1,eps,render=False):
     # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
@@ -211,24 +205,21 @@ class DQN(object):
     &#34;&#34;&#34;
     Fit the agent 
     
-    Parameters:
+    **Parameters**:
 
-    `n_episodes` (`int`): number of episodes to run
+    *n_episodes* (*int*): number of episodes to run
 
-    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
+    *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode
 
-    `discount_rate` (`float`): reward discount rate. Defaults to 0.99
+    *discount_rate* (*float*): reward discount rate. Defaults to 0.99
 
-    `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
+    *max_memory_size* (*int*): max memory size for PER. Defaults to 2000
 
-    `td_steps` (`int`): number of temporal difference steps to use in learning
+    *td_steps* (*int*): number of temporal difference steps to use in learning
 
-    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
+    *reset* (*boolean*): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
-    `render` (`boolean`): render environment while fitting
-
-    Returns:
-    (`nn.Module`) updated agent
+    *render* (*boolean*): render environment while fitting
 
     &#34;&#34;&#34;
     logging.info(&#34;Running DQN.fit&#34;)
@@ -244,39 +235,34 @@ class DQN(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
-    memsize = 0
-    step_list = []
-    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    logging.info(&#34;filling memory...&#34;)
+    memsize = 0
+    step_list = deque(maxlen=td_steps)
+    td = 0 #temporal difference step counter
+
+    logging.info(&#34;Filling memory...&#34;)
     while memsize &lt; max_memory_size:
       # fill step list
       step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
       s1 = step_list[-1][3]
       done = (step_list[-1][4] == 0)
       td += 1
-      if td == td_steps:
+      if td &gt;= td_steps:
         # compute temporal difference n-steps SARST
         td_sarst = self._process_td_steps(step_list,discount_rate)
-        #calculate sarst delta
         memory.add(1,td_sarst)
-
         memsize +=1
-        td = 0
-        step_list = []
 
       if done:
-        # compute temporal difference n-steps SARST
-        if len(step_list) != 0:
+        if td &lt; td_steps:
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          #calculate sarst delta
           memory.add(1,td_sarst)
-
           memsize +=1
-          td = 0
-          step_list = []
-
+        # compute temporal difference n-steps SARST
+        td = 0
+        step_list = deque(maxlen=td_steps)
         s1 = self.env.reset()
+
 
     # fit agent
     logging.info(&#34;Training...&#34;)
@@ -287,88 +273,89 @@ class DQN(object):
       ts_reward = 0
 
       td = 0
-      step_list = []
+      step_list = deque(maxlen=td_steps)
 
       for j in range(max_ts_by_episode):
 
         #execute policy
-        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,render))
         td += 1
         s1 = step_list[-1][3]
         r = step_list[-1][2] #latest reward
+
+        if np.isnan(r):
+          raise Exception(&#34;The model diverged; decreasing step sizes or increasing tau can help to prevent this.&#34;)
+
         done = (step_list[-1][4] == 0)
 
-        if td == td_steps:
+        if td &gt;= td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
           delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-          #memory.add(1,td_sarst)
-
-          td = 0
-          step_list = []
 
         # sgd update
-        for h in range(scheduler.n_sgd_updates):
-          # get replay batch
-          P = memory.total()
-          N = memory.get_current_size()
+        # get replay batch
+        P = memory.total()
+        N = memory.get_current_size()
+        if N &gt; 0:
+          for h in range(scheduler.steps_per_update):
 
-          samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
-          batch = []
-          batch_ids = []
-          batch_p = []
-          for u in samples:
-            idx, p ,data = memory.get(u)
-            batch.append(data) #data from selected leaf
-            batch_ids.append(idx)
-            batch_p.append(p/P)
+            try:
+              samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+            except OverflowError as e:
+              print(e)
+              print(&#34;it seems that the model parameters are diverging. Decreasing step size or increasing tau might help.&#34;)
 
-          #compute importance sampling weights
-          batch_w = np.array(batch_p)
-          batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
-          batch_w /= np.max(batch_w)
-          batch_w = torch.from_numpy(batch_w).float()
+            batch = []
+            batch_ids = []
+            batch_p = []
+            for u in samples:
+              idx, p ,data = memory.get(u)
+              batch.append(data) #data from selected leaf
+              batch_ids.append(idx)
+              batch_p.append(p/P)
 
-          # perform optimisation
-          delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
+            #compute importance sampling weights
+            batch_w = np.array(batch_p)
+            batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
+            batch_w /= np.max(batch_w)
+            batch_w = torch.from_numpy(batch_w).float()
 
-          #update memory
-          for k in range(len(delta)):
-            memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
+            # perform optimisation
+            delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
 
-          #target network hard update
-        if (scheduler.counter % scheduler.tau) == (scheduler.tau-1):
-          target.model.load_state_dict(agent.model.state_dict())
+            #update memory
+            for k in range(len(delta)):
+              memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
 
-    
+            #target network hard update
+          if (scheduler.counter % scheduler.tau) == (scheduler.tau-1):
+            target.model.load_state_dict(agent.model.state_dict())
+
         # trace information
         ts_reward += r
 
         # update learning rate and other hyperparameters
-        agent.scheduler.step()
+        agent._step()
         scheduler._step()
 
         if done:
-
-          if len(step_list) != 0:
-            td_sarst = self._process_td_steps(step_list,discount_rate)
-            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
-            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-            #memory.add(1,td_sarst)
-            td = 0
-            step_list = []
-
           break
 
-      self.mean_trace.append(ts_reward/max_ts_by_episode)
-      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+      if td &lt; td_steps:
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+
+      self.mean_trace.append(ts_reward)
+      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward,ts=scheduler.counter))
 
     if render:
       self.env.close()
 
   def plot(self):
-    &#34;&#34;&#34;plot mean episodic reward from last `fit` call
+    &#34;&#34;&#34;plot mean timestep reward from last `fit` call
 
     &#34;&#34;&#34;
 
@@ -377,17 +364,18 @@ class DQN(object):
     else:
       df = pd.DataFrame({
         &#34;episode&#34;:list(range(len(self.mean_trace))),
-        &#34;mean reward&#34;: self.mean_trace})
+        &#34;mean_reward&#34;: self.mean_trace})
 
-    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+    ax = sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean_reward&#34;)
+    ax.set(xlabel=&#39;episode&#39;, ylabel=&#39;Mean episodic reward&#39;)
     plt.show()
 
   def play(self,n=200):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
     
-    Parameters:
+    **Parameters**:
 
-    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+    *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
 
     &#34;&#34;&#34;
     with torch.no_grad():
@@ -403,9 +391,9 @@ class DQN(object):
   def forward(self,x):
     &#34;&#34;&#34;evaluate input with agent
 
-    Parameters:
+    **Parameters**:
 
-    `x` (`torch.Tensor`): input vector
+    *x* (*torch.Tensor*): input vector
 
     &#34;&#34;&#34;
     if isinstance(x,np.ndarray):
@@ -428,28 +416,27 @@ class DQN(object):
 </code></dt>
 <dd>
 <section class="desc"><p>double Q network with importance-sampled prioritised experienced replay (PER)</p>
-<p>Parameters:</p>
-<p><code>agent</code> (<code>rlmodels.models.Agent</code>): agent model wrapper</p>
-<p><code>env</code>: environment object with the same interface as OpenAI gym's environments</p>
-<p><code>scheduler</code> (<a title="rlmodels.models.DQN.DQNScheduler" href="#rlmodels.models.DQN.DQNScheduler"><code>DQNScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>agent</em> (<a title="rlmodels.models.grad_utils.Agent" href="grad_utils.html#rlmodels.models.grad_utils.Agent"><code>Agent</code></a>): model wrapper</p>
+<p><em>env</em>: environment object with the same interface as OpenAI gym's environments</p>
+<p><em>scheduler</em> (<a title="rlmodels.models.DQN.DQNScheduler" href="#rlmodels.models.DQN.DQNScheduler"><code>DQNScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class DQN(object):
   &#34;&#34;&#34;double Q network with importance-sampled prioritised experienced replay (PER)
 
-  Parameters:
+  **Parameters**:
 
-  `agent` (`rlmodels.models.Agent`): agent model wrapper
+  *agent* (`rlmodels.models.grad_utils.Agent`): model wrapper
 
-  `env`: environment object with the same interface as OpenAI gym&#39;s environments
+  *env*: environment object with the same interface as OpenAI gym&#39;s environments
 
-  `scheduler` (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
+  *scheduler* (`DQNScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   def __init__(self,agent,env,scheduler):
 
     self.agent = agent
-    self.agent.loss = nn.MSELoss()
     self.env = env
     self.scheduler = scheduler
     self.mean_trace = []
@@ -467,10 +454,6 @@ class DQN(object):
     td_steps,
     optimise=True):
 
-    # return delta = PER weights. if optimise = True, agents are updated in-place
-    batch_size = len(batch)
-
-    sample_weights = (sample_weights**0.5).view(-1,1)
     #process batch
     S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
     A1 = torch.from_numpy(np.array([x[1] for x in batch])).long()
@@ -478,29 +461,26 @@ class DQN(object):
     S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
+    agent1.optim.zero_grad()
+
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
       Y = R.view(-1,1) + discount_rate**(td_steps)*agent2.forward(S2).gather(1,A2.view(-1,1))*T.view(-1,1) #evaluate with target network
 
-    Y_hat = agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
+    delta = Y - agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
     
-    delta = torch.abs(Y_hat-Y).detach().numpy()
-
     if optimise:
       #optimise
-      agent1.loss(sample_weights*Y_hat, sample_weights*Y).backward() #weighted loss
+      (sample_weights.view(-1,1)*delta**2).mean().backward()
       agent1.optim.step()
 
       if logging.getLogger().getEffectiveLevel() == logging.DEBUG: #additional logger calculations
         with torch.no_grad():
-          Y_hat2 =  agent1.forward(S1).gather(1,A1.view(-1,1))
-          delta2 = torch.abs(Y_hat2-Y).detach().numpy()
-        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=np.mean(delta)-np.mean(delta2)))
+          delta2 = Y - agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
+        logging.debug(&#34;mean loss improvement: {x}&#34;.format(x=torch.abs(delta).mean()-torch.abs(delta2).mean()))
 
-    agent1.optim.zero_grad()
-
-    return delta
+    return torch.abs(delta).detach().numpy()
 
   def _step(self,agent,target,s1,eps,render=False):
     # perform an action given an agent, a target, the current state, and an epsilon (exploration probability)
@@ -545,24 +525,21 @@ class DQN(object):
     &#34;&#34;&#34;
     Fit the agent 
     
-    Parameters:
+    **Parameters**:
 
-    `n_episodes` (`int`): number of episodes to run
+    *n_episodes* (*int*): number of episodes to run
 
-    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
+    *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode
 
-    `discount_rate` (`float`): reward discount rate. Defaults to 0.99
+    *discount_rate* (*float*): reward discount rate. Defaults to 0.99
 
-    `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
+    *max_memory_size* (*int*): max memory size for PER. Defaults to 2000
 
-    `td_steps` (`int`): number of temporal difference steps to use in learning
+    *td_steps* (*int*): number of temporal difference steps to use in learning
 
-    `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
+    *reset* (*boolean*): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
 
-    `render` (`boolean`): render environment while fitting
-
-    Returns:
-    (`nn.Module`) updated agent
+    *render* (*boolean*): render environment while fitting
 
     &#34;&#34;&#34;
     logging.info(&#34;Running DQN.fit&#34;)
@@ -578,39 +555,34 @@ class DQN(object):
     # initialize and fill memory 
     memory = SumTree(max_memory_size)
 
-    memsize = 0
-    step_list = []
-    td = 0 #temporal difference step counter
     s1 = self.env.reset()
-    logging.info(&#34;filling memory...&#34;)
+    memsize = 0
+    step_list = deque(maxlen=td_steps)
+    td = 0 #temporal difference step counter
+
+    logging.info(&#34;Filling memory...&#34;)
     while memsize &lt; max_memory_size:
       # fill step list
       step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
       s1 = step_list[-1][3]
       done = (step_list[-1][4] == 0)
       td += 1
-      if td == td_steps:
+      if td &gt;= td_steps:
         # compute temporal difference n-steps SARST
         td_sarst = self._process_td_steps(step_list,discount_rate)
-        #calculate sarst delta
         memory.add(1,td_sarst)
-
         memsize +=1
-        td = 0
-        step_list = []
 
       if done:
-        # compute temporal difference n-steps SARST
-        if len(step_list) != 0:
+        if td &lt; td_steps:
           td_sarst = self._process_td_steps(step_list,discount_rate)
-          #calculate sarst delta
           memory.add(1,td_sarst)
-
           memsize +=1
-          td = 0
-          step_list = []
-
+        # compute temporal difference n-steps SARST
+        td = 0
+        step_list = deque(maxlen=td_steps)
         s1 = self.env.reset()
+
 
     # fit agent
     logging.info(&#34;Training...&#34;)
@@ -621,34 +593,265 @@ class DQN(object):
       ts_reward = 0
 
       td = 0
-      step_list = []
+      step_list = deque(maxlen=td_steps)
 
       for j in range(max_ts_by_episode):
 
         #execute policy
-        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+        step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,render))
         td += 1
         s1 = step_list[-1][3]
         r = step_list[-1][2] #latest reward
+
+        if np.isnan(r):
+          raise Exception(&#34;The model diverged; decreasing step sizes or increasing tau can help to prevent this.&#34;)
+
         done = (step_list[-1][4] == 0)
 
-        if td == td_steps:
+        if td &gt;= td_steps:
           # compute temporal difference n-steps SARST and its delta
           td_sarst = self._process_td_steps(step_list,discount_rate)
           delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
           memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-          #memory.add(1,td_sarst)
-
-          td = 0
-          step_list = []
 
         # sgd update
-        for h in range(scheduler.n_sgd_updates):
-          # get replay batch
-          P = memory.total()
-          N = memory.get_current_size()
+        # get replay batch
+        P = memory.total()
+        N = memory.get_current_size()
+        if N &gt; 0:
+          for h in range(scheduler.steps_per_update):
 
-          samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+            try:
+              samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+            except OverflowError as e:
+              print(e)
+              print(&#34;it seems that the model parameters are diverging. Decreasing step size or increasing tau might help.&#34;)
+
+            batch = []
+            batch_ids = []
+            batch_p = []
+            for u in samples:
+              idx, p ,data = memory.get(u)
+              batch.append(data) #data from selected leaf
+              batch_ids.append(idx)
+              batch_p.append(p/P)
+
+            #compute importance sampling weights
+            batch_w = np.array(batch_p)
+            batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
+            batch_w /= np.max(batch_w)
+            batch_w = torch.from_numpy(batch_w).float()
+
+            # perform optimisation
+            delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
+
+            #update memory
+            for k in range(len(delta)):
+              memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
+
+            #target network hard update
+          if (scheduler.counter % scheduler.tau) == (scheduler.tau-1):
+            target.model.load_state_dict(agent.model.state_dict())
+
+        # trace information
+        ts_reward += r
+
+        # update learning rate and other hyperparameters
+        agent._step()
+        scheduler._step()
+
+        if done:
+          break
+
+      if td &lt; td_steps:
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+
+      self.mean_trace.append(ts_reward)
+      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward,ts=scheduler.counter))
+
+    if render:
+      self.env.close()
+
+  def plot(self):
+    &#34;&#34;&#34;plot mean timestep reward from last `fit` call
+
+    &#34;&#34;&#34;
+
+    if len(self.mean_trace)==0:
+      print(&#34;The trace is empty.&#34;)
+    else:
+      df = pd.DataFrame({
+        &#34;episode&#34;:list(range(len(self.mean_trace))),
+        &#34;mean_reward&#34;: self.mean_trace})
+
+    ax = sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean_reward&#34;)
+    ax.set(xlabel=&#39;episode&#39;, ylabel=&#39;Mean episodic reward&#39;)
+    plt.show()
+
+  def play(self,n=200):
+    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
+    
+    **Parameters**:
+
+    *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
+
+    &#34;&#34;&#34;
+    with torch.no_grad():
+      obs = self.env.reset()
+      for k in range(n):
+        action = np.argmax(self.agent.model.forward(obs).numpy())
+        obs,reward,done,info = self.env.step(action)
+        self.env.render()
+        if done:
+          break
+      self.env.close()
+
+  def forward(self,x):
+    &#34;&#34;&#34;evaluate input with agent
+
+    **Parameters**:
+
+    *x* (*torch.Tensor*): input vector
+
+    &#34;&#34;&#34;
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+    return self.agent.model.forward(x)</code></pre>
+</details>
+<h3>Methods</h3>
+<dl>
+<dt id="rlmodels.models.DQN.DQN.fit"><code class="name flex">
+<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, td_steps=1, reset=False, render=False)</span>
+</code></dt>
+<dd>
+<section class="desc"><p>Fit the agent </p>
+<p><strong>Parameters</strong>:</p>
+<p><em>n_episodes</em> (<em>int</em>): number of episodes to run</p>
+<p><em>max_ts_by_episodes</em> (<em>int</em>): maximum number of timesteps to run per episode</p>
+<p><em>discount_rate</em> (<em>float</em>): reward discount rate. Defaults to 0.99</p>
+<p><em>max_memory_size</em> (<em>int</em>): max memory size for PER. Defaults to 2000</p>
+<p><em>td_steps</em> (<em>int</em>): number of temporal difference steps to use in learning</p>
+<p><em>reset</em> (<em>boolean</em>): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before</p>
+<p><em>render</em> (<em>boolean</em>): render environment while fitting</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">def fit(
+  self,
+  n_episodes,
+  max_ts_by_episode,
+  discount_rate=0.99,
+  max_memory_size=2000,
+  td_steps = 1,
+  reset=False,
+  render = False):
+
+  &#34;&#34;&#34;
+  Fit the agent 
+  
+  **Parameters**:
+
+  *n_episodes* (*int*): number of episodes to run
+
+  *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode
+
+  *discount_rate* (*float*): reward discount rate. Defaults to 0.99
+
+  *max_memory_size* (*int*): max memory size for PER. Defaults to 2000
+
+  *td_steps* (*int*): number of temporal difference steps to use in learning
+
+  *reset* (*boolean*): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
+
+  *render* (*boolean*): render environment while fitting
+
+  &#34;&#34;&#34;
+  logging.info(&#34;Running DQN.fit&#34;)
+  if reset:
+    self.scheduler.reset()
+    self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
+    self.trace = []
+
+  scheduler = self.scheduler
+
+  agent = self.agent
+  target = copy.deepcopy(agent)
+  # initialize and fill memory 
+  memory = SumTree(max_memory_size)
+
+  s1 = self.env.reset()
+  memsize = 0
+  step_list = deque(maxlen=td_steps)
+  td = 0 #temporal difference step counter
+
+  logging.info(&#34;Filling memory...&#34;)
+  while memsize &lt; max_memory_size:
+    # fill step list
+    step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
+    s1 = step_list[-1][3]
+    done = (step_list[-1][4] == 0)
+    td += 1
+    if td &gt;= td_steps:
+      # compute temporal difference n-steps SARST
+      td_sarst = self._process_td_steps(step_list,discount_rate)
+      memory.add(1,td_sarst)
+      memsize +=1
+
+    if done:
+      if td &lt; td_steps:
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        memory.add(1,td_sarst)
+        memsize +=1
+      # compute temporal difference n-steps SARST
+      td = 0
+      step_list = deque(maxlen=td_steps)
+      s1 = self.env.reset()
+
+
+  # fit agent
+  logging.info(&#34;Training...&#34;)
+  for i in range(n_episodes):
+        
+    s1 = self.env.reset()
+
+    ts_reward = 0
+
+    td = 0
+    step_list = deque(maxlen=td_steps)
+
+    for j in range(max_ts_by_episode):
+
+      #execute policy
+      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,render))
+      td += 1
+      s1 = step_list[-1][3]
+      r = step_list[-1][2] #latest reward
+
+      if np.isnan(r):
+        raise Exception(&#34;The model diverged; decreasing step sizes or increasing tau can help to prevent this.&#34;)
+
+      done = (step_list[-1][4] == 0)
+
+      if td &gt;= td_steps:
+        # compute temporal difference n-steps SARST and its delta
+        td_sarst = self._process_td_steps(step_list,discount_rate)
+        delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+
+      # sgd update
+      # get replay batch
+      P = memory.total()
+      N = memory.get_current_size()
+      if N &gt; 0:
+        for h in range(scheduler.steps_per_update):
+
+          try:
+            samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
+          except OverflowError as e:
+            print(e)
+            print(&#34;it seems that the model parameters are diverging. Decreasing step size or increasing tau might help.&#34;)
+
           batch = []
           batch_ids = []
           batch_p = []
@@ -675,261 +878,23 @@ class DQN(object):
         if (scheduler.counter % scheduler.tau) == (scheduler.tau-1):
           target.model.load_state_dict(agent.model.state_dict())
 
-    
-        # trace information
-        ts_reward += r
-
-        # update learning rate and other hyperparameters
-        agent.scheduler.step()
-        scheduler._step()
-
-        if done:
-
-          if len(step_list) != 0:
-            td_sarst = self._process_td_steps(step_list,discount_rate)
-            delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
-            memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-            #memory.add(1,td_sarst)
-            td = 0
-            step_list = []
-
-          break
-
-      self.mean_trace.append(ts_reward/max_ts_by_episode)
-      logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
-
-    if render:
-      self.env.close()
-
-  def plot(self):
-    &#34;&#34;&#34;plot mean episodic reward from last `fit` call
-
-    &#34;&#34;&#34;
-
-    if len(self.mean_trace)==0:
-      print(&#34;The trace is empty.&#34;)
-    else:
-      df = pd.DataFrame({
-        &#34;episode&#34;:list(range(len(self.mean_trace))),
-        &#34;mean reward&#34;: self.mean_trace})
-
-    sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
-    plt.show()
-
-  def play(self,n=200):
-    &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
-    
-    Parameters:
-
-    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
-
-    &#34;&#34;&#34;
-    with torch.no_grad():
-      obs = self.env.reset()
-      for k in range(n):
-        action = np.argmax(self.agent.model.forward(obs).numpy())
-        obs,reward,done,info = self.env.step(action)
-        self.env.render()
-        if done:
-          break
-      self.env.close()
-
-  def forward(self,x):
-    &#34;&#34;&#34;evaluate input with agent
-
-    Parameters:
-
-    `x` (`torch.Tensor`): input vector
-
-    &#34;&#34;&#34;
-    if isinstance(x,np.ndarray):
-      x = torch.from_numpy(x).float()
-    return self.agent.model.forward(x)</code></pre>
-</details>
-<h3>Methods</h3>
-<dl>
-<dt id="rlmodels.models.DQN.DQN.fit"><code class="name flex">
-<span>def <span class="ident">fit</span></span>(<span>self, n_episodes, max_ts_by_episode, discount_rate=0.99, max_memory_size=2000, td_steps=1, reset=False, render=False)</span>
-</code></dt>
-<dd>
-<section class="desc"><p>Fit the agent </p>
-<p>Parameters:</p>
-<p><code>n_episodes</code> (<code>int</code>): number of episodes to run</p>
-<p><code>max_ts_by_episodes</code> (<code>int</code>): maximum number of timesteps to run per episode</p>
-<p><code>discount_rate</code> (<code>float</code>): reward discount rate. Defaults to 0.99</p>
-<p><code>max_memory_size</code> (<code>int</code>): max memory size for PER. Defaults to 2000</p>
-<p><code>td_steps</code> (<code>int</code>): number of temporal difference steps to use in learning</p>
-<p><code>reset</code> (<code>boolean</code>): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before</p>
-<p><code>render</code> (<code>boolean</code>): render environment while fitting</p>
-<p>Returns:
-(<code>nn.Module</code>) updated agent</p></section>
-<details class="source">
-<summary>Source code</summary>
-<pre><code class="python">def fit(
-  self,
-  n_episodes,
-  max_ts_by_episode,
-  discount_rate=0.99,
-  max_memory_size=2000,
-  td_steps = 1,
-  reset=False,
-  render = False):
-
-  &#34;&#34;&#34;
-  Fit the agent 
-  
-  Parameters:
-
-  `n_episodes` (`int`): number of episodes to run
-
-  `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode
-
-  `discount_rate` (`float`): reward discount rate. Defaults to 0.99
-
-  `max_memory_size` (`int`): max memory size for PER. Defaults to 2000
-
-  `td_steps` (`int`): number of temporal difference steps to use in learning
-
-  `reset` (`boolean`): reset trace, scheduler time counter and learning rate time counter to zero if fit has been called before
-
-  `render` (`boolean`): render environment while fitting
-
-  Returns:
-  (`nn.Module`) updated agent
-
-  &#34;&#34;&#34;
-  logging.info(&#34;Running DQN.fit&#34;)
-  if reset:
-    self.scheduler.reset()
-    self.agent.scheduler = optim.scheduler.LambdaLR(self.agent.opt,self.scheduler.agent_lr_scheduler_fn)
-    self.trace = []
-
-  scheduler = self.scheduler
-
-  agent = self.agent
-  target = copy.deepcopy(agent)
-  # initialize and fill memory 
-  memory = SumTree(max_memory_size)
-
-  memsize = 0
-  step_list = []
-  td = 0 #temporal difference step counter
-  s1 = self.env.reset()
-  logging.info(&#34;filling memory...&#34;)
-  while memsize &lt; max_memory_size:
-    # fill step list
-    step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
-    s1 = step_list[-1][3]
-    done = (step_list[-1][4] == 0)
-    td += 1
-    if td == td_steps:
-      # compute temporal difference n-steps SARST
-      td_sarst = self._process_td_steps(step_list,discount_rate)
-      #calculate sarst delta
-      memory.add(1,td_sarst)
-
-      memsize +=1
-      td = 0
-      step_list = []
-
-    if done:
-      # compute temporal difference n-steps SARST
-      if len(step_list) != 0:
-        td_sarst = self._process_td_steps(step_list,discount_rate)
-        #calculate sarst delta
-        memory.add(1,td_sarst)
-
-        memsize +=1
-        td = 0
-        step_list = []
-
-      s1 = self.env.reset()
-
-  # fit agent
-  logging.info(&#34;Training...&#34;)
-  for i in range(n_episodes):
-        
-    s1 = self.env.reset()
-
-    ts_reward = 0
-
-    td = 0
-    step_list = []
-
-    for j in range(max_ts_by_episode):
-
-      #execute policy
-      step_list.append(self._step(agent,target,s1,scheduler.exploration_rate,False))
-      td += 1
-      s1 = step_list[-1][3]
-      r = step_list[-1][2] #latest reward
-      done = (step_list[-1][4] == 0)
-
-      if td == td_steps:
-        # compute temporal difference n-steps SARST and its delta
-        td_sarst = self._process_td_steps(step_list,discount_rate)
-        delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
-        memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-        #memory.add(1,td_sarst)
-
-        td = 0
-        step_list = []
-
-      # sgd update
-      for h in range(scheduler.n_sgd_updates):
-        # get replay batch
-        P = memory.total()
-        N = memory.get_current_size()
-
-        samples = np.random.uniform(high=P,size=min(scheduler.batch_size,N))
-        batch = []
-        batch_ids = []
-        batch_p = []
-        for u in samples:
-          idx, p ,data = memory.get(u)
-          batch.append(data) #data from selected leaf
-          batch_ids.append(idx)
-          batch_p.append(p/P)
-
-        #compute importance sampling weights
-        batch_w = np.array(batch_p)
-        batch_w = (1.0/(N*batch_w))**scheduler.PER_beta
-        batch_w /= np.max(batch_w)
-        batch_w = torch.from_numpy(batch_w).float()
-
-        # perform optimisation
-        delta = self._get_delta(agent,target,batch,discount_rate,batch_w,td_steps,optimise=True)
-
-        #update memory
-        for k in range(len(delta)):
-          memory.update(batch_ids[k],(delta[k] + 1.0/max_memory_size)**scheduler.PER_alpha)
-
-        #target network hard update
-      if (scheduler.counter % scheduler.tau) == (scheduler.tau-1):
-        target.model.load_state_dict(agent.model.state_dict())
-
-  
       # trace information
       ts_reward += r
 
       # update learning rate and other hyperparameters
-      agent.scheduler.step()
+      agent._step()
       scheduler._step()
 
       if done:
-
-        if len(step_list) != 0:
-          td_sarst = self._process_td_steps(step_list,discount_rate)
-          delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
-          memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
-          #memory.add(1,td_sarst)
-          td = 0
-          step_list = []
-
         break
 
-    self.mean_trace.append(ts_reward/max_ts_by_episode)
-    logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward/max_ts_by_episode,ts=scheduler.counter))
+    if td &lt; td_steps:
+      td_sarst = self._process_td_steps(step_list,discount_rate)
+      delta = self._get_delta(agent,target,[td_sarst],discount_rate,torch.ones(1),td_steps,optimise=False)
+      memory.add((delta[0] + 1.0/max_memory_size)**scheduler.PER_alpha,td_sarst)
+
+    self.mean_trace.append(ts_reward)
+    logging.info(&#34;episode {n}, timestep {ts}, mean reward {x}&#34;.format(n=i,x=ts_reward,ts=scheduler.counter))
 
   if render:
     self.env.close()</code></pre>
@@ -940,16 +905,16 @@ class DQN(object):
 </code></dt>
 <dd>
 <section class="desc"><p>evaluate input with agent</p>
-<p>Parameters:</p>
-<p><code>x</code> (<code>torch.Tensor</code>): input vector</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>x</em> (<em>torch.Tensor</em>): input vector</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def forward(self,x):
   &#34;&#34;&#34;evaluate input with agent
 
-  Parameters:
+  **Parameters**:
 
-  `x` (`torch.Tensor`): input vector
+  *x* (*torch.Tensor*): input vector
 
   &#34;&#34;&#34;
   if isinstance(x,np.ndarray):
@@ -962,16 +927,16 @@ class DQN(object):
 </code></dt>
 <dd>
 <section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
-<p>Parameters:</p>
-<p><code>n</code> (<code>int</code>): maximum number of timesteps to visualise. Defaults to 200</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>n</em> (<em>int</em>): maximum number of timesteps to visualise. Defaults to 200</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def play(self,n=200):
   &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
   
-  Parameters:
+  **Parameters**:
 
-  `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+  *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
 
   &#34;&#34;&#34;
   with torch.no_grad():
@@ -989,11 +954,11 @@ class DQN(object):
 <span>def <span class="ident">plot</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>plot mean episodic reward from last <code>fit</code> call</p></section>
+<section class="desc"><p>plot mean timestep reward from last <code>fit</code> call</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def plot(self):
-  &#34;&#34;&#34;plot mean episodic reward from last `fit` call
+  &#34;&#34;&#34;plot mean timestep reward from last `fit` call
 
   &#34;&#34;&#34;
 
@@ -1002,9 +967,10 @@ class DQN(object):
   else:
     df = pd.DataFrame({
       &#34;episode&#34;:list(range(len(self.mean_trace))),
-      &#34;mean reward&#34;: self.mean_trace})
+      &#34;mean_reward&#34;: self.mean_trace})
 
-  sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean reward&#34;)
+  ax = sns.lineplot(data=df,x=&#34;episode&#34;,y=&#34;mean_reward&#34;)
+  ax.set(xlabel=&#39;episode&#39;, ylabel=&#39;Mean episodic reward&#39;)
   plt.show()</code></pre>
 </details>
 </dd>
@@ -1012,40 +978,40 @@ class DQN(object):
 </dd>
 <dt id="rlmodels.models.DQN.DQNScheduler"><code class="flex name class">
 <span>class <span class="ident">DQNScheduler</span></span>
-<span>(</span><span>batch_size, exploration_rate, PER_alpha, PER_beta, tau, agent_lr_scheduler_fn=None, n_sgd_updates=None)</span>
+<span>(</span><span>batch_size, exploration_rate, PER_alpha, PER_beta, tau, agent_lr_scheduler_fn=None, steps_per_update=None)</span>
 </code></dt>
 <dd>
 <section class="desc"><p>double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
 At each step it sets the hyperparameter values given by the provided functons</p>
-<p>Parameters:</p>
-<p><code>batch_size_f</code> (<code>function</code>): batch size scheduler function</p>
-<p><code>exploration_rate</code> (<code>function</code>): exploration rate scheduler function </p>
-<p><code>PER_alpha</code> (<code>function</code>): prioritised experience replay alpha scheduler function</p>
-<p><code>PER_beta</code> (<code>function</code>): prioritised experience replay beta scheduler function</p>
-<p><code>tau</code> (<code>function</code>): hard target update time window scheduler function</p>
-<p><code>agent_lr_scheduler_fn</code> (<code>function</code>): multiplicative lr update for actor</p>
-<p><code>n_sgd_updates</code> (<code>function</code>): steps between SGD updates as a function of the step counter</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>batch_size_f</em> (<em>function</em>): batch size scheduler function</p>
+<p><em>exploration_rate</em> (<em>function</em>): exploration rate scheduler function </p>
+<p><em>PER_alpha</em> (<em>function</em>): prioritised experience replay alpha scheduler function</p>
+<p><em>PER_beta</em> (<em>function</em>): prioritised experience replay beta scheduler function</p>
+<p><em>tau</em> (<em>function</em>): hard target update time window scheduler function</p>
+<p><em>agent_lr_scheduler_fn</em> (<em>function</em>): multiplicative lr update for actor</p>
+<p><em>steps_per_update</em> (<em>function</em>): number of SGD steps per update</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class DQNScheduler(object):
   &#34;&#34;&#34;double Q network hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global timestep counter.
   At each step it sets the hyperparameter values given by the provided functons
 
-  Parameters:
+  **Parameters**:
   
-  `batch_size_f` (`function`): batch size scheduler function
+  *batch_size_f* (*function*): batch size scheduler function
 
-  `exploration_rate` (`function`): exploration rate scheduler function 
+  *exploration_rate* (*function*): exploration rate scheduler function 
 
-  `PER_alpha` (`function`): prioritised experience replay alpha scheduler function
+  *PER_alpha* (*function*): prioritised experience replay alpha scheduler function
 
-  `PER_beta` (`function`): prioritised experience replay beta scheduler function
+  *PER_beta* (*function*): prioritised experience replay beta scheduler function
 
-  `tau` (`function`): hard target update time window scheduler function
+  *tau* (*function*): hard target update time window scheduler function
 
-  `agent_lr_scheduler_fn` (`function`): multiplicative lr update for actor
+  *agent_lr_scheduler_fn* (*function*): multiplicative lr update for actor
 
-  `n_sgd_updates` (`function`): steps between SGD updates as a function of the step counter
+  *steps_per_update* (*function*): number of SGD steps per update
 
   &#34;&#34;&#34;
   def __init__(
@@ -1056,14 +1022,14 @@ At each step it sets the hyperparameter values given by the provided functons</p
     PER_beta,
     tau,
     agent_lr_scheduler_fn=None,
-    n_sgd_updates=None):
+    steps_per_update=None):
 
     self.batch_size_f = batch_size
     self.exploration_rate_f = exploration_rate
     self.PER_alpha_f = PER_alpha
     self.tau_f = tau
     self.PER_beta_f = PER_beta
-    self.n_sgd_updates_f = n_sgd_updates if n_sgd_updates is not None else lambda t: 1
+    self.steps_per_update_f = steps_per_update if steps_per_update is not None else lambda t: 1
 
     self.agent_lr_scheduler_fn = agent_lr_scheduler_fn
 
@@ -1076,7 +1042,7 @@ At each step it sets the hyperparameter values given by the provided functons</p
     self.PER_alpha = self.PER_alpha_f(self.counter)
     self.tau = self.tau_f(self.counter)
     self.PER_beta = self.PER_beta_f(self.counter)
-    self.n_sgd_updates = self.n_sgd_updates_f(self.counter)
+    self.steps_per_update = self.steps_per_update_f(self.counter)
 
     self.counter += 1
 

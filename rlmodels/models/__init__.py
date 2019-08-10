@@ -2,5 +2,5 @@
 from .DQN import *
 from .DDPG import *
 from .CMAES import *
-from .REINFORCE import *
+from .AC import *
 from .grad_utils import *

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1" />
 <meta name="generator" content="pdoc 0.6.3" />
-<title>rlmodels.models API documentation</title>
+<title>rlmodels.nets.DiscretePolicy API documentation</title>
 <meta name="description" content="" />
 <link href='https://cdnjs.cloudflare.com/ajax/libs/normalize/8.0.0/normalize.min.css' rel='stylesheet'>
 <link href='https://cdnjs.cloudflare.com/ajax/libs/10up-sanitize.css/8.0.0/sanitize.min.css' rel='stylesheet'>
@@ -17,49 +17,113 @@
 <main>
 <article id="content">
 <header>
-<h1 class="title">Module <code>rlmodels.models</code></h1>
+<h1 class="title">Module <code>rlmodels.nets.DiscretePolicy</code></h1>
 </header>
 <section id="section-intro">
 <details class="source">
 <summary>Source code</summary>
-<pre><code class="python">#__init__.py
-from .DQN import *
-from .DDPG import *
-from .CMAES import *
-from .AC import *
-from .grad_utils import *</code></pre>
+<pre><code class="python">import numpy as np
+
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+
+from .VanillaNet import VanillaNet
+
+class DiscretePolicy(VanillaNet):
+  &#34;&#34;&#34; discrete policy network where actions are taken according to a softmax function. 
+  Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.Categorical` instance.
+  
+  **Parameters**: 
+
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
+
+  *input_size* (*int*): state dimension
+
+  *output_size* (*int*): action dimension
+
+  &#34;&#34;&#34;
+  def __init__(self,layer_sizes,input_size,output_size):
+
+    super(DiscretePolicy,self).__init__(layer_sizes,input_size,output_size,F.softmax)
+
+  def forward(self,x):
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+
+    for layer in range(self.n_hidden_layers):
+      x = F.relu(getattr(self,&#34;linear{n}&#34;.format(n=layer))(x))
+    x = self.final_activation(getattr(self,&#34;linear{n}&#34;.format(n=self.n_hidden_layers))(x),dim=-1)
+    
+    dist = torch.distributions.Categorical(x)
+    return dist</code></pre>
 </details>
 </section>
 <section>
-<h2 class="section-title" id="header-submodules">Sub-modules</h2>
+</section>
+<section>
+</section>
+<section>
+</section>
+<section>
+<h2 class="section-title" id="header-classes">Classes</h2>
 <dl>
-<dt><code class="name"><a title="rlmodels.models.AC" href="AC.html">rlmodels.models.AC</a></code></dt>
+<dt id="rlmodels.nets.DiscretePolicy.DiscretePolicy"><code class="flex name class">
+<span>class <span class="ident">DiscretePolicy</span></span>
+<span>(</span><span>layer_sizes, input_size, output_size)</span>
+</code></dt>
 <dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.CMAES" href="CMAES.html">rlmodels.models.CMAES</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.DDPG" href="DDPG.html">rlmodels.models.DDPG</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.DQN" href="DQN.html">rlmodels.models.DQN</a></code></dt>
-<dd>
-<section class="desc"></section>
-</dd>
-<dt><code class="name"><a title="rlmodels.models.grad_utils" href="grad_utils.html">rlmodels.models.grad_utils</a></code></dt>
-<dd>
-<section class="desc"></section>
+<section class="desc"><p>discrete policy network where actions are taken according to a softmax function.
+Hidden layers have ReLU activation by default. The <code>forward</code> method returns a <code>torch.distributions.Categorical</code> instance.</p>
+<p><strong>Parameters</strong>: </p>
+<p><em>layer_sizes</em> (<em>list</em> of <em>int</em>s): list with hidden layer sizes </p>
+<p><em>input_size</em> (<em>int</em>): state dimension</p>
+<p><em>output_size</em> (<em>int</em>): action dimension</p></section>
+<details class="source">
+<summary>Source code</summary>
+<pre><code class="python">class DiscretePolicy(VanillaNet):
+  &#34;&#34;&#34; discrete policy network where actions are taken according to a softmax function. 
+  Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.Categorical` instance.
+  
+  **Parameters**: 
+
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
+
+  *input_size* (*int*): state dimension
+
+  *output_size* (*int*): action dimension
+
+  &#34;&#34;&#34;
+  def __init__(self,layer_sizes,input_size,output_size):
+
+    super(DiscretePolicy,self).__init__(layer_sizes,input_size,output_size,F.softmax)
+
+  def forward(self,x):
+    if isinstance(x,np.ndarray):
+      x = torch.from_numpy(x).float()
+
+    for layer in range(self.n_hidden_layers):
+      x = F.relu(getattr(self,&#34;linear{n}&#34;.format(n=layer))(x))
+    x = self.final_activation(getattr(self,&#34;linear{n}&#34;.format(n=self.n_hidden_layers))(x),dim=-1)
+    
+    dist = torch.distributions.Categorical(x)
+    return dist</code></pre>
+</details>
+<h3>Ancestors</h3>
+<ul class="hlist">
+<li><a title="rlmodels.nets.VanillaNet.VanillaNet" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet">VanillaNet</a></li>
+<li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Inherited members</h3>
+<ul class="hlist">
+<li><code><b><a title="rlmodels.nets.VanillaNet.VanillaNet" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet">VanillaNet</a></b></code>:
+<ul class="hlist">
+<li><code><a title="rlmodels.nets.VanillaNet.VanillaNet.forward" href="VanillaNet.html#rlmodels.nets.VanillaNet.VanillaNet.forward">forward</a></code></li>
+</ul>
+</li>
+</ul>
 </dd>
 </dl>
-</section>
-<section>
-</section>
-<section>
-</section>
-<section>
 </section>
 </article>
 <nav id="sidebar">
@@ -70,16 +134,14 @@ from .grad_utils import *</code></pre>
 <ul id="index">
 <li><h3>Super-module</h3>
 <ul>
-<li><code><a title="rlmodels" href="../index.html">rlmodels</a></code></li>
+<li><code><a title="rlmodels.nets" href="index.html">rlmodels.nets</a></code></li>
 </ul>
 </li>
-<li><h3><a href="#header-submodules">Sub-modules</a></h3>
+<li><h3><a href="#header-classes">Classes</a></h3>
 <ul>
-<li><code><a title="rlmodels.models.AC" href="AC.html">rlmodels.models.AC</a></code></li>
-<li><code><a title="rlmodels.models.CMAES" href="CMAES.html">rlmodels.models.CMAES</a></code></li>
-<li><code><a title="rlmodels.models.DDPG" href="DDPG.html">rlmodels.models.DDPG</a></code></li>
-<li><code><a title="rlmodels.models.DQN" href="DQN.html">rlmodels.models.DQN</a></code></li>
-<li><code><a title="rlmodels.models.grad_utils" href="grad_utils.html">rlmodels.models.grad_utils</a></code></li>
+<li>
+<h4><code><a title="rlmodels.nets.DiscretePolicy.DiscretePolicy" href="#rlmodels.nets.DiscretePolicy.DiscretePolicy">DiscretePolicy</a></code></h4>
+</li>
 </ul>
 </li>
 </ul>

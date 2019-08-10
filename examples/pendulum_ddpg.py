@@ -25,6 +25,7 @@ torch.manual_seed(1)
 #get input and output dims
 input_dim = env.observation_space.shape[0]
 output_dim = env.action_space.shape[0]
+
 def actor_output(x):
 	return 2*torch.tanh(x)
 
@@ -38,10 +39,11 @@ ddpg_scheduler = DDPGScheduler(
 	PER_alpha = lambda t: 1, #constant
 	PER_beta = lambda t: 0, #gorw linearly up to 1
 	tau = lambda t: 0.001, #constant
-	actor_lr_scheduler_fn = lambda t: 1,#multiplicative stepsize update,
-	critic_lr_scheduler_fn = lambda t: 1, #multiplicative stepsize update,
-	n_sgd_updates = lambda t: 1) #constant
+	actor_lr_scheduler_fn = lambda t: 1 if t < 5000 else 0.1,#multiplicative stepsize update,
+	critic_lr_scheduler_fn = lambda t: 1 if t < 5000 else 0.1, #multiplicative stepsize update,
+	steps_per_update = lambda t: 1) #constant
 
+#reducing step size of critic helps a lot to avoid catastrophic forgetting!
 
 # create agent models
 actor_model = VanillaNet([250,10],input_dim,output_dim,actor_output)
@@ -62,9 +64,9 @@ critic = Agent(
 ddpg = DDPG(actor,critic,env,ddpg_scheduler)
 
 ddpg.fit(
-	n_episodes=50,
+	n_episodes=70,
 	max_ts_by_episode=max_ep_ts,
-	max_memory_size=5000,
+	max_memory_size=3000,
 	render=False,
 	td_steps=10)
 

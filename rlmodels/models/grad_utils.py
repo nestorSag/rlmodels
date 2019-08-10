@@ -7,9 +7,9 @@ class SumTree:
 
   source of the SumTree class code : https://github.com/jaromiru/AI-blog/blob/master/SumTree.py
   
-  Parameters:
+  **Parameters**:
 
-  `capacity` (`int`): number of tree leaves
+  *capacity* (*int*): number of tree leaves
 
   """
   write = 0
@@ -17,7 +17,7 @@ class SumTree:
 
   def __init__(self, capacity):
     # INPUT
-    # `capacity`: number of tree leaves
+    # *capacity*: number of tree leaves
     self.capacity = capacity
     self.tree = np.zeros( 2*capacity - 1 )
     self.data = np.zeros( capacity, dtype=object )
@@ -52,11 +52,13 @@ class SumTree:
     return self.tree[0]
 
   def add(self, p, data):
-    """adds data to tree, potetntially overwritting older data
+    """adds data to tree, potentially overwritting older data
   
-    Parameters:
-    `p` (`float`): leaf weight
-    `data`: leaf data
+    **Parameters**:
+
+    *p* (*float*): leaf weight
+
+    *data*: leaf data
     """
   
     idx = self.write + self.capacity - 1
@@ -73,11 +75,11 @@ class SumTree:
   def update(self, idx, p):
     """updates leaf weight
     
-    Parameters:
+    **Parameters**:
 
-    `idx` (`int`): leaf index
+    *idx* (*int*): leaf index
     
-    `p` (`float`): new weight
+    *p* (*float*): new weight
 
     """
     change = p - self.tree[idx]
@@ -90,13 +92,13 @@ class SumTree:
   def get(self, s):
     """get leaf corresponding to numeric value
     
-    Parameters
+    **Parameters**:
 
-    `s` (`float`): numeric value
+    *s* (*float*): numeric value
 
-    Returns:
+    **Returns**:
 
-    triplet with leaf id (`int`), tree node id (`int`) and  leaf data
+    triplet with leaf id (*int*), tree node id (*int*) and  leaf data
     """
 
     idx = self._retrieve(0, s)
@@ -107,11 +109,11 @@ class SumTree:
 class Agent(object):
   """neural network gradient optimisation wrapper
   
-  Parameters:
+  **Parameters**:
 
-  `model` (`torch.nn.Module`): Pytorch neural network model
+  *model* (*torch.nn.Module*): Pytorch neural network model
 
-  `optim_` (`torch.optim`): Pytorch optimizer object 
+  *opt* (*torch.optim*): Pytorch optimizer object 
 
   """
   
@@ -121,46 +123,51 @@ class Agent(object):
     self.scheduler = None
 
   def forward(self,x):
+    """ Apply *model*'s  *forward* method to input
+
+    **Parameters**:
+
+    *x* (*torch.Tensor*): state tensor
+
+    """
+
     if isinstance(x,np.ndarray):
       x = torch.from_numpy(x).float()
     return self.model.forward(x)
 
-  def step(self):
+  def _step(self):
     if self.scheduler is not None:
       self.scheduler.step()
 
-  def get_action_dist(self,s):
-    return self.model.get_action_dist(s)
-
-class FormattedActionEnv(object):
-  """environment wrapper that formats a model output action to gym environment's required format
+# class FormattedActionEnv(object):
+#   """environment wrapper that formats a model output action to gym environment's required format
   
-  Parameters:
+#   Parameters:
 
-  `env` : environment with the same interface as in gym library
+#   *env* : environment with the same interface as in gym library
 
-  `action_map` (`function`): mapper that takes a model output and formats it to the environment's standard input type
+#   *action_map* (*function*): mapper that takes a model output and formats it to the environment's standard input type
 
-  """
-  def __init__(self,env,action_map):
-    self.env = env
-    self.action_space = self.env.action_space
-    self.observation_space = self.env.observation_space
-    self.action_map = action_map
+#   """
+#   def __init__(self,env,action_map):
+#     self.env = env
+#     self.action_space = self.env.action_space
+#     self.observation_space = self.env.observation_space
+#     self.action_map = action_map
 
-  def step(self,a):
-    a = self.action_map(a)
-    s,r,done,info = self.env.step(a)
-    return s,r,done,info
+#   def step(self,a):
+#     a = self.action_map(a)
+#     s,r,done,info = self.env.step(a)
+#     return s,r,done,info
 
-  def render(self):
+#   def render(self):
 
-    self.env.render()
-  def close(self):
-    self.env.close()
+#     self.env.render()
+#   def close(self):
+#     self.env.close()
 
-  def reset(self):
-    self.env.reset()
+#   def reset(self):
+#     self.env.reset()
 
-  def seed(self,seed):
-    self.env.seed(seed)
+#   def seed(self,seed):
+#     self.env.seed(seed)

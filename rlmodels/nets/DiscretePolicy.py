@@ -7,15 +7,16 @@ import torch.nn.functional as F
 from .VanillaNet import VanillaNet
 
 class DiscretePolicy(VanillaNet):
-  """ discrete policy network where actions are taken according to softmax. Hidden layers have ReLU activation by default.
+  """ discrete policy network where actions are taken according to a softmax function. 
+  Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.Categorical` instance.
   
-  Parameters: 
+  **Parameters**: 
 
-  `layer_sizes` (`list` of `int`s): list with hidden layer sizes 
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
 
-  `input_size` (`int`): state dimension
+  *input_size* (*int*): state dimension
 
-  `output_size` (`int`): action dimension
+  *output_size* (*int*): action dimension
 
   """
   def __init__(self,layer_sizes,input_size,output_size):

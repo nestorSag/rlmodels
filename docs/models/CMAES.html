@@ -37,15 +37,15 @@ class CMAESScheduler(object):
   &#34;&#34;&#34;CMAES hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global generation counter.
   At each generation it sets the hyperparameter values given by the provided functons
 
-  Parameters:
+  **Parameters**:
   
-  `alpha_mu` (`function`): step size scheduler for the mean parameter 
+  *alpha_mu* (*function*): step size scheduler for the mean parameter 
 
-  `alpha_cm` (`function`): step size scheduler for the covariance matrix parameter
+  *alpha_cm* (*function*): step size scheduler for the covariance matrix parameter
 
-  `beta_mu` (`function`): momentum term for the mean vector parameter
+  *beta_mu* (*function*): momentum term for the mean vector parameter
 
-  `beta_cm` (`function`): momentum term for covariance matrix parameter
+  *beta_cm* (*function*): momentum term for covariance matrix parameter
 
   &#34;&#34;&#34;
   def __init__(
@@ -84,13 +84,13 @@ class CMAESScheduler(object):
 class CMAES(object):
   &#34;&#34;&#34;correlation matrix adaptive evolutionary strategy algorithm 
   
-  Parameters: 
+  **Parameters**: 
 
-  `agent` (`torch.nn.Module`): Pytorch neural network model 
+  *agent* (*torch.nn.Module*): Pytorch neural network model 
 
-  `env`: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method
+  *env*: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method
 
-  `scheduler` (`CMAESScheduler`): scheduler object that controls hyperparameter values at runtime
+  *scheduler* (`CMAESScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   
@@ -208,24 +208,25 @@ class CMAES(object):
 
     &#34;&#34;&#34;Fit the agent 
   
-    Parameters:
+    **Parameters**:
     
-    `weight_func` (`function`): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on `numpy` arrays; defaults to quadratic function
+    *weight_func* (*function*): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on *numpy* arrays; defaults to quadratic function
 
-    `reward_objective` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
+    *reward_objective* (*float*): stop when max episodic reward passes this threshold. Defaults to *None*
 
-    `n_generations` (`int`): maximum number of generations to run. Defaults to 100
+    *n_generations* (*int*): maximum number of generations to run. Defaults to 100
 
-    `individuals_by_gen` (`int`): population size for each generation. Defaults to 20
+    *individuals_by_gen* (*int*): population size for each generation. Defaults to 20
 
-    `episodes_by_ind` (`int`): how many episodes to run for each individual in the population. Defaults to 10
+    *episodes_by_ind* (*int*): how many episodes to run for each individual in the population. Defaults to 10
 
-    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode. Defaults to 200
+    *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode. Defaults to 200
 
-    `reset` (`boolean`): reset scheduler counter to zero and performance traces if `fit` has been called before
+    *reset* (*boolean*): reset scheduler counter to zero and performance traces if *fit* has been called before
   
-    Returns: 
-    (`torch nn.Module`) best-performing agent from last generation
+    **Returns**: 
+
+    (*torch nn.Module*) best-performing agent from last generation
 
     &#34;&#34;&#34;
     if reset:
@@ -271,7 +272,7 @@ class CMAES(object):
               action = self.agent.forward(obs)
             obs,reward,done,info = self.env.step(action)
             
-            ep_reward += reward/max_ts_by_episode #avg intra episode reward
+            ep_reward += reward #avg intra episode reward
 
             if done:
               break
@@ -320,7 +321,7 @@ class CMAES(object):
     return self.agent
 
   def plot(self):
-    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last `fit` call
 
     &#34;&#34;&#34;
     if len(self.mean_trace)==0:
@@ -331,15 +332,16 @@ class CMAES(object):
         &#34;value&#34;: self.max_trace + self.mean_trace,
         &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
 
-      sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      ax = sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      ax.set(xlabel=&#39;generation&#39;, ylabel=&#39;Mean episodic reward&#39;)
       plt.show()
 
   def play(self,n=200):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
     
-    Parameters:
+    **Parameters**:
 
-    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+    *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
 
     &#34;&#34;&#34;
 
@@ -356,9 +358,9 @@ class CMAES(object):
   def forward(self,x):
     &#34;&#34;&#34;evaluate input with agent
 
-    Parameters:
+    **Parameters**:
 
-    `x` (`torch.Tensor`): input vector
+    *x* (*torch.Tensor*): input vector
 
     &#34;&#34;&#34;
     if isinstance(x,np.ndarray):
@@ -381,22 +383,22 @@ class CMAES(object):
 </code></dt>
 <dd>
 <section class="desc"><p>correlation matrix adaptive evolutionary strategy algorithm </p>
-<p>Parameters: </p>
-<p><code>agent</code> (<code>torch.nn.Module</code>): Pytorch neural network model </p>
-<p><code>env</code>: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method</p>
-<p><code>scheduler</code> (<a title="rlmodels.models.CMAES.CMAESScheduler" href="#rlmodels.models.CMAES.CMAESScheduler"><code>CMAESScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
+<p><strong>Parameters</strong>: </p>
+<p><em>agent</em> (<em>torch.nn.Module</em>): Pytorch neural network model </p>
+<p><em>env</em>: environment class with roughly the same interface as OpenAI gym's environments, particularly the step() method</p>
+<p><em>scheduler</em> (<a title="rlmodels.models.CMAES.CMAESScheduler" href="#rlmodels.models.CMAES.CMAESScheduler"><code>CMAESScheduler</code></a>): scheduler object that controls hyperparameter values at runtime</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class CMAES(object):
   &#34;&#34;&#34;correlation matrix adaptive evolutionary strategy algorithm 
   
-  Parameters: 
+  **Parameters**: 
 
-  `agent` (`torch.nn.Module`): Pytorch neural network model 
+  *agent* (*torch.nn.Module*): Pytorch neural network model 
 
-  `env`: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method
+  *env*: environment class with roughly the same interface as OpenAI gym&#39;s environments, particularly the step() method
 
-  `scheduler` (`CMAESScheduler`): scheduler object that controls hyperparameter values at runtime
+  *scheduler* (`CMAESScheduler`): scheduler object that controls hyperparameter values at runtime
 
   &#34;&#34;&#34;
   
@@ -514,24 +516,25 @@ class CMAES(object):
 
     &#34;&#34;&#34;Fit the agent 
   
-    Parameters:
+    **Parameters**:
     
-    `weight_func` (`function`): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on `numpy` arrays; defaults to quadratic function
+    *weight_func* (*function*): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on *numpy* arrays; defaults to quadratic function
 
-    `reward_objective` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
+    *reward_objective* (*float*): stop when max episodic reward passes this threshold. Defaults to *None*
 
-    `n_generations` (`int`): maximum number of generations to run. Defaults to 100
+    *n_generations* (*int*): maximum number of generations to run. Defaults to 100
 
-    `individuals_by_gen` (`int`): population size for each generation. Defaults to 20
+    *individuals_by_gen* (*int*): population size for each generation. Defaults to 20
 
-    `episodes_by_ind` (`int`): how many episodes to run for each individual in the population. Defaults to 10
+    *episodes_by_ind* (*int*): how many episodes to run for each individual in the population. Defaults to 10
 
-    `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode. Defaults to 200
+    *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode. Defaults to 200
 
-    `reset` (`boolean`): reset scheduler counter to zero and performance traces if `fit` has been called before
+    *reset* (*boolean*): reset scheduler counter to zero and performance traces if *fit* has been called before
   
-    Returns: 
-    (`torch nn.Module`) best-performing agent from last generation
+    **Returns**: 
+
+    (*torch nn.Module*) best-performing agent from last generation
 
     &#34;&#34;&#34;
     if reset:
@@ -577,7 +580,7 @@ class CMAES(object):
               action = self.agent.forward(obs)
             obs,reward,done,info = self.env.step(action)
             
-            ep_reward += reward/max_ts_by_episode #avg intra episode reward
+            ep_reward += reward #avg intra episode reward
 
             if done:
               break
@@ -626,7 +629,7 @@ class CMAES(object):
     return self.agent
 
   def plot(self):
-    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call
+    &#34;&#34;&#34;plot mean and max episodic reward for each generation from last `fit` call
 
     &#34;&#34;&#34;
     if len(self.mean_trace)==0:
@@ -637,15 +640,16 @@ class CMAES(object):
         &#34;value&#34;: self.max_trace + self.mean_trace,
         &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
 
-      sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      ax = sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+      ax.set(xlabel=&#39;generation&#39;, ylabel=&#39;Mean episodic reward&#39;)
       plt.show()
 
   def play(self,n=200):
     &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
     
-    Parameters:
+    **Parameters**:
 
-    `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+    *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
 
     &#34;&#34;&#34;
 
@@ -662,9 +666,9 @@ class CMAES(object):
   def forward(self,x):
     &#34;&#34;&#34;evaluate input with agent
 
-    Parameters:
+    **Parameters**:
 
-    `x` (`torch.Tensor`): input vector
+    *x* (*torch.Tensor*): input vector
 
     &#34;&#34;&#34;
     if isinstance(x,np.ndarray):
@@ -678,16 +682,16 @@ class CMAES(object):
 </code></dt>
 <dd>
 <section class="desc"><p>Fit the agent </p>
-<p>Parameters:</p>
-<p><code>weight_func</code> (<code>function</code>): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on <code>numpy</code> arrays; defaults to quadratic function</p>
-<p><code>reward_objective</code> (<code>float</code>): stop when max episodic reward passes this threshold. Defaults to <code>None</code></p>
-<p><code>n_generations</code> (<code>int</code>): maximum number of generations to run. Defaults to 100</p>
-<p><code>individuals_by_gen</code> (<code>int</code>): population size for each generation. Defaults to 20</p>
-<p><code>episodes_by_ind</code> (<code>int</code>): how many episodes to run for each individual in the population. Defaults to 10</p>
-<p><code>max_ts_by_episodes</code> (<code>int</code>): maximum number of timesteps to run per episode. Defaults to 200</p>
-<p><code>reset</code> (<code>boolean</code>): reset scheduler counter to zero and performance traces if <code>fit</code> has been called before</p>
-<p>Returns:
-(<code>torch nn.Module</code>) best-performing agent from last generation</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>weight_func</em> (<em>function</em>): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on <em>numpy</em> arrays; defaults to quadratic function</p>
+<p><em>reward_objective</em> (<em>float</em>): stop when max episodic reward passes this threshold. Defaults to <em>None</em></p>
+<p><em>n_generations</em> (<em>int</em>): maximum number of generations to run. Defaults to 100</p>
+<p><em>individuals_by_gen</em> (<em>int</em>): population size for each generation. Defaults to 20</p>
+<p><em>episodes_by_ind</em> (<em>int</em>): how many episodes to run for each individual in the population. Defaults to 10</p>
+<p><em>max_ts_by_episodes</em> (<em>int</em>): maximum number of timesteps to run per episode. Defaults to 200</p>
+<p><em>reset</em> (<em>boolean</em>): reset scheduler counter to zero and performance traces if <em>fit</em> has been called before</p>
+<p><strong>Returns</strong>: </p>
+<p>(<em>torch nn.Module</em>) best-performing agent from last generation</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def fit(self,
@@ -701,24 +705,25 @@ class CMAES(object):
 
   &#34;&#34;&#34;Fit the agent 
 
-  Parameters:
+  **Parameters**:
   
-  `weight_func` (`function`): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on `numpy` arrays; defaults to quadratic function
+  *weight_func* (*function*): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on *numpy* arrays; defaults to quadratic function
 
-  `reward_objective` (`float`): stop when max episodic reward passes this threshold. Defaults to `None`
+  *reward_objective* (*float*): stop when max episodic reward passes this threshold. Defaults to *None*
 
-  `n_generations` (`int`): maximum number of generations to run. Defaults to 100
+  *n_generations* (*int*): maximum number of generations to run. Defaults to 100
 
-  `individuals_by_gen` (`int`): population size for each generation. Defaults to 20
+  *individuals_by_gen* (*int*): population size for each generation. Defaults to 20
 
-  `episodes_by_ind` (`int`): how many episodes to run for each individual in the population. Defaults to 10
+  *episodes_by_ind* (*int*): how many episodes to run for each individual in the population. Defaults to 10
 
-  `max_ts_by_episodes` (`int`): maximum number of timesteps to run per episode. Defaults to 200
+  *max_ts_by_episodes* (*int*): maximum number of timesteps to run per episode. Defaults to 200
 
-  `reset` (`boolean`): reset scheduler counter to zero and performance traces if `fit` has been called before
+  *reset* (*boolean*): reset scheduler counter to zero and performance traces if *fit* has been called before
 
-  Returns: 
-  (`torch nn.Module`) best-performing agent from last generation
+  **Returns**: 
+
+  (*torch nn.Module*) best-performing agent from last generation
 
   &#34;&#34;&#34;
   if reset:
@@ -764,7 +769,7 @@ class CMAES(object):
             action = self.agent.forward(obs)
           obs,reward,done,info = self.env.step(action)
           
-          ep_reward += reward/max_ts_by_episode #avg intra episode reward
+          ep_reward += reward #avg intra episode reward
 
           if done:
             break
@@ -818,16 +823,16 @@ class CMAES(object):
 </code></dt>
 <dd>
 <section class="desc"><p>evaluate input with agent</p>
-<p>Parameters:</p>
-<p><code>x</code> (<code>torch.Tensor</code>): input vector</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>x</em> (<em>torch.Tensor</em>): input vector</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def forward(self,x):
   &#34;&#34;&#34;evaluate input with agent
 
-  Parameters:
+  **Parameters**:
 
-  `x` (`torch.Tensor`): input vector
+  *x* (*torch.Tensor*): input vector
 
   &#34;&#34;&#34;
   if isinstance(x,np.ndarray):
@@ -840,16 +845,16 @@ class CMAES(object):
 </code></dt>
 <dd>
 <section class="desc"><p>show agent's animation. Only works for OpenAI environments</p>
-<p>Parameters:</p>
-<p><code>n</code> (<code>int</code>): maximum number of timesteps to visualise. Defaults to 200</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>n</em> (<em>int</em>): maximum number of timesteps to visualise. Defaults to 200</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def play(self,n=200):
   &#34;&#34;&#34;show agent&#39;s animation. Only works for OpenAI environments
   
-  Parameters:
+  **Parameters**:
 
-  `n` (`int`): maximum number of timesteps to visualise. Defaults to 200
+  *n* (*int*): maximum number of timesteps to visualise. Defaults to 200
 
   &#34;&#34;&#34;
 
@@ -868,11 +873,11 @@ class CMAES(object):
 <span>def <span class="ident">plot</span></span>(<span>self)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>plot mean and max episodic reward for each generation from last fit call</p></section>
+<section class="desc"><p>plot mean and max episodic reward for each generation from last <code>fit</code> call</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">def plot(self):
-  &#34;&#34;&#34;plot mean and max episodic reward for each generation from last fit call
+  &#34;&#34;&#34;plot mean and max episodic reward for each generation from last `fit` call
 
   &#34;&#34;&#34;
   if len(self.mean_trace)==0:
@@ -883,7 +888,8 @@ class CMAES(object):
       &#34;value&#34;: self.max_trace + self.mean_trace,
       &#34;trace&#34;: [&#34;max&#34; for x in self.max_trace] + [&#34;mean&#34; for x in self.mean_trace]})
 
-    sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+    ax = sns.lineplot(data=df,x=&#34;generation&#34;,y=&#34;value&#34;,hue=&#34;trace&#34;)
+    ax.set(xlabel=&#39;generation&#39;, ylabel=&#39;Mean episodic reward&#39;)
     plt.show()</code></pre>
 </details>
 </dd>
@@ -896,26 +902,26 @@ class CMAES(object):
 <dd>
 <section class="desc"><p>CMAES hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global generation counter.
 At each generation it sets the hyperparameter values given by the provided functons</p>
-<p>Parameters:</p>
-<p><code>alpha_mu</code> (<code>function</code>): step size scheduler for the mean parameter </p>
-<p><code>alpha_cm</code> (<code>function</code>): step size scheduler for the covariance matrix parameter</p>
-<p><code>beta_mu</code> (<code>function</code>): momentum term for the mean vector parameter</p>
-<p><code>beta_cm</code> (<code>function</code>): momentum term for covariance matrix parameter</p></section>
+<p><strong>Parameters</strong>:</p>
+<p><em>alpha_mu</em> (<em>function</em>): step size scheduler for the mean parameter </p>
+<p><em>alpha_cm</em> (<em>function</em>): step size scheduler for the covariance matrix parameter</p>
+<p><em>beta_mu</em> (<em>function</em>): momentum term for the mean vector parameter</p>
+<p><em>beta_cm</em> (<em>function</em>): momentum term for covariance matrix parameter</p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class CMAESScheduler(object):
   &#34;&#34;&#34;CMAES hyperparameter scheduler. It allows to modify hyperparameters at runtime as a function of a global generation counter.
   At each generation it sets the hyperparameter values given by the provided functons
 
-  Parameters:
+  **Parameters**:
   
-  `alpha_mu` (`function`): step size scheduler for the mean parameter 
+  *alpha_mu* (*function*): step size scheduler for the mean parameter 
 
-  `alpha_cm` (`function`): step size scheduler for the covariance matrix parameter
+  *alpha_cm* (*function*): step size scheduler for the covariance matrix parameter
 
-  `beta_mu` (`function`): momentum term for the mean vector parameter
+  *beta_mu* (*function*): momentum term for the mean vector parameter
 
-  `beta_cm` (`function`): momentum term for covariance matrix parameter
+  *beta_cm* (*function*): momentum term for covariance matrix parameter
 
   &#34;&#34;&#34;
   def __init__(

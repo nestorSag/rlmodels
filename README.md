@@ -1,10 +1,11 @@
-# rlmodels: a reinforcement learning library
+# rlmodels: a ACment learning library
 
-This project is a collection of some popular optimisation algorithms for reinforcement learning problem. At the moment the available models are:
+This project is a collection of some popular optimisation algorithms for ACment learning problem. At the moment the available models are:
 
 * DQN
 * DDPG
 * CMAES
+* AC
 
 with some more going to be added in the future.
 
@@ -68,7 +69,7 @@ dqn_scheduler = DQNScheduler(
 	PER_alpha = lambda t: 1, #constant
 	PER_beta = lambda t: 1, #constant
 	tau = lambda t: 100, #constant
-	agent_lr_scheduler_fn = lambda t: 1.25**(-int(t/2500)), #decrease step size every 2,500 steps,
+	agent_lr_scheduler_fn = lambda t: 1.25**(-int(t/1000)), #decrease step size every 2,500 steps,
 	steps_per_update = lambda t: 1) #constant
 
 agent_lr = 0.5 #initial learning rate
@@ -85,10 +86,11 @@ the models take a scheduler object as argument which allows parameters to be cha
 dqn = DQN(agent,env,dqn_scheduler)
 
 dqn.fit(
-	n_episodes=140,
+	n_episodes=170,
 	max_ts_by_episode=max_ep_ts,
 	max_memory_size=2000,
 	td_steps=1)
+
 
 ```
 

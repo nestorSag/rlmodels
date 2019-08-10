@@ -34,17 +34,17 @@ import torch.optim as optim
 import itertools
 
 class VanillaNet(nn.Module):
-  &#34;&#34;&#34;neural network with variale number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
+  &#34;&#34;&#34;neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
   
-  Parameters: 
+  **Parameters**: 
 
-  `layer_sizes` (`list` of `int`s): list with hidden layer sizes 
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
 
-  `input_size` (`int`): input size 
+  *input_size* (*int*): input size 
 
-  `output_size` (`int`): output size 
+  *output_size* (*int*): output size 
 
-  `final_activation` (`int`): torch activation function for output layer. Can be None
+  *final_activation* (*function*): torch activation function for output layer. Can be `None`
 
   &#34;&#34;&#34;
 
@@ -86,26 +86,26 @@ class VanillaNet(nn.Module):
 <span>(</span><span>layer_sizes, input_size, output_size, final_activation)</span>
 </code></dt>
 <dd>
-<section class="desc"><p>neural network with variale number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer </p>
-<p>Parameters: </p>
-<p><code>layer_sizes</code> (<code>list</code> of <code>int</code>s): list with hidden layer sizes </p>
-<p><code>input_size</code> (<code>int</code>): input size </p>
-<p><code>output_size</code> (<code>int</code>): output size </p>
-<p><code>final_activation</code> (<code>int</code>): torch activation function for output layer. Can be None</p></section>
+<section class="desc"><p>neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer </p>
+<p><strong>Parameters</strong>: </p>
+<p><em>layer_sizes</em> (<em>list</em> of <em>int</em>s): list with hidden layer sizes </p>
+<p><em>input_size</em> (<em>int</em>): input size </p>
+<p><em>output_size</em> (<em>int</em>): output size </p>
+<p><em>final_activation</em> (<em>function</em>): torch activation function for output layer. Can be <code>None</code></p></section>
 <details class="source">
 <summary>Source code</summary>
 <pre><code class="python">class VanillaNet(nn.Module):
-  &#34;&#34;&#34;neural network with variale number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
+  &#34;&#34;&#34;neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
   
-  Parameters: 
+  **Parameters**: 
 
-  `layer_sizes` (`list` of `int`s): list with hidden layer sizes 
+  *layer_sizes* (*list* of *int*s): list with hidden layer sizes 
 
-  `input_size` (`int`): input size 
+  *input_size* (*int*): input size 
 
-  `output_size` (`int`): output size 
+  *output_size* (*int*): output size 
 
-  `final_activation` (`int`): torch activation function for output layer. Can be None
+  *final_activation* (*function*): torch activation function for output layer. Can be `None`
 
   &#34;&#34;&#34;
 
@@ -135,6 +135,11 @@ class VanillaNet(nn.Module):
 <h3>Ancestors</h3>
 <ul class="hlist">
 <li>torch.nn.modules.module.Module</li>
+</ul>
+<h3>Subclasses</h3>
+<ul class="hlist">
+<li><a title="rlmodels.nets.ContinuousPolicy.ContinuousPolicy" href="ContinuousPolicy.html#rlmodels.nets.ContinuousPolicy.ContinuousPolicy">ContinuousPolicy</a></li>
+<li><a title="rlmodels.nets.DiscretePolicy.DiscretePolicy" href="DiscretePolicy.html#rlmodels.nets.DiscretePolicy.DiscretePolicy">DiscretePolicy</a></li>
 </ul>
 <h3>Methods</h3>
 <dl>
