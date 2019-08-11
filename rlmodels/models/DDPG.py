@@ -177,9 +177,6 @@ class DDPG(object):
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
     # calculate critic target
-    critic.optim.zero_grad()
-    target_critic.optim.zero_grad()
-
     with torch.no_grad():
       A2 = target_actor.forward(S2).view(-1,1)
 
@@ -188,6 +185,7 @@ class DDPG(object):
     delta = Y - critic.forward(torch.cat((S1,A1),dim=1))
 
     #optimise critic
+    critic.optim.zero_grad()
     if optimise:
       (sample_weights.view(-1,1)*delta**2).mean().backward()
       critic.optim.step()
@@ -200,8 +198,6 @@ class DDPG(object):
 
     
     actor.optim.zero_grad()
-    target_actor.optim.zero_grad()
-
     # optimise actor
     if optimise:
       q = - torch.mean(critic.forward(torch.cat((S1,actor.forward(S1).view(-1,1)),dim=1)))

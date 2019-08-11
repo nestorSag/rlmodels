@@ -118,12 +118,12 @@ class AC(object):
     time_idx = np.array(range(batch_size))
     step_discounts = torch.from_numpy(discount_rate**((1+time_idx)[::-1])).float().view(-1,1)
 
-    critic.optim.zero_grad()
     with torch.no_grad():
       Y = R.view(-1,1) + step_discounts*critic.forward(S2)*T.view(-1,1) #evaluate with target network
 
     delta = Y - critic.forward(S1)
 
+    critic.optim.zero_grad()
     #optimise critic
     if optimise:
       (delta**2).mean().backward() #weighted loss

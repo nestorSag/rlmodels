@@ -117,8 +117,6 @@ class DQN(object):
     S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
     T = torch.from_numpy(np.array([x[4] for x in batch])).float()
 
-    agent1.optim.zero_grad()
-
     with torch.no_grad():
       _, A2 = torch.max(agent1.forward(S2),1) #decide with q network
 
@@ -126,6 +124,7 @@ class DQN(object):
 
     delta = Y - agent1.forward(S1).gather(1,A1.view(-1,1)) #optimise q network
     
+    agent1.optim.zero_grad()
     if optimise:
       #optimise
       (sample_weights.view(-1,1)*delta**2).mean().backward()
