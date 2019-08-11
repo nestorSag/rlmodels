@@ -8,7 +8,7 @@ setuptools.setup(
 
      name='rlmodels',  
 
-     version='1.0.6',
+     version='1.0.7',
 
      author="Nestor Sanchez",
 
@@ -45,6 +45,6 @@ setuptools.setup(
 
      ],
 
-     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.6.tar.gz'
+     download_url = 'https://github.com/nestorSag/rlmodels/archive/1.0.7.tar.gz'
 
  )

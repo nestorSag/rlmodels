@@ -104,7 +104,7 @@ class AR1Noise(object):
     self.reset()
   #
   def reset(self):
-    """Reset the internal state (= noise) to mean (mu)."""
+    """Reset the internal state."""
     self.state = 0
   #
   def sample(self):

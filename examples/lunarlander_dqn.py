@@ -37,7 +37,7 @@ agent = Agent(agent_model,agent_opt)
 dqn = DQN(agent,env,dqn_scheduler)
 
 dqn.fit(
-  n_episodes=350,
+  n_episodes=230,
   max_ts_by_episode=max_ep_ts,
   max_memory_size=2000,
   td_steps=5)
