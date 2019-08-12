@@ -23,11 +23,11 @@ np.random.seed(1)
 torch.manual_seed(1)
 
 ac_scheduler = ACScheduler(
-  actor_lr_scheduler_fn = lambda t: 1 if t < 5000 else 0.1 if t < 150000 else 0.01, #reduce step size after some time (multiplicative update)
+  actor_lr_scheduler_fn = lambda t: 1, #reduce step size after some time (multiplicative update)
   critic_lr_scheduler_fn = lambda t: 1) #reduce step size after some time (multiplicative update)
 
-actor_lr = 1e-1
-actor_model = DiscretePolicy(layer_sizes=[250,250],input_size=input_dim,output_size=output_dim)
+actor_lr = 1e-3
+actor_model = DiscretePolicy(layer_sizes=[100,100],input_size=input_dim,output_size=output_dim)
 actor_opt = optim.SGD(actor_model.parameters(),lr=actor_lr,weight_decay = 0, momentum = 0)
 
 actor = Agent(
@@ -35,7 +35,7 @@ actor = Agent(
   opt = actor_opt)
 
 critic_lr = 1e-2
-critic_model = VanillaNet([250,250],input_dim,1,None)
+critic_model = VanillaNet([100,100],input_dim,1,None)
 critic_opt = optim.SGD(critic_model.parameters(),lr=critic_lr,weight_decay = 0, momentum = 0)
 
 critic = Agent(
