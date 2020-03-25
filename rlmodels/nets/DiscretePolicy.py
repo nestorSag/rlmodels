@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from .VanillaNet import VanillaNet
+from .FullyConnected import FullyConnected
 
-class DiscretePolicy(VanillaNet):
+class DiscretePolicy(FullyConnected):
   """ discrete policy network where actions are taken according to a softmax function. 
   Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.Categorical` instance.
   

@@ -4,7 +4,7 @@ import torch.optim as optim
 import gym
 
 from rlmodels.models.AC import *
-from rlmodels.nets import VanillaNet, DiscretePolicy
+from rlmodels.nets import FullyConnected, DiscretePolicy
 
 import logging
 
@@ -35,7 +35,7 @@ actor = Agent(
   opt = actor_opt)
 
 critic_lr = 1e-2
-critic_model = VanillaNet([100,100],input_dim,1,None)
+critic_model = FullyConnected([100,100],input_dim,1,None)
 critic_opt = optim.SGD(critic_model.parameters(),lr=critic_lr,weight_decay = 0, momentum = 0)
 
 critic = Agent(

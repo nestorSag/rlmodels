@@ -4,7 +4,7 @@ import torch.optim as optim
 import gym
 
 from rlmodels.models.DQN import *
-from rlmodels.nets import VanillaNet
+from rlmodels.nets import FullyConnected
 
 import logging
 
@@ -32,7 +32,7 @@ dqn_scheduler = DQNScheduler(
 	steps_per_update = lambda t: 1) #constant
 
 agent_lr = 0.5 #initial learning rate
-agent_model = VanillaNet([60],4,2,None)
+agent_model = FullyConnected([60],4,2,None)
 agent_opt = optim.SGD(agent_model.parameters(),lr=agent_lr,weight_decay = 0, momentum = 0)
 
 agent = Agent(agent_model,agent_opt)

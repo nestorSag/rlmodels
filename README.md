@@ -39,7 +39,7 @@ import torch.optim as optim
 import gym
 
 from rlmodels.models.DQN import *
-from rlmodels.nets import VanillaNet
+from rlmodels.nets import FullyConnected
 
 import logging
 
@@ -58,7 +58,7 @@ torch.manual_seed(1)
 ```
 the episode and timepstep numbers as well as the average reward trace is logged to the file ```model_fit.log```. Setting the logging level to ```logging.DEBUG``` will also log information about gradient descent steps.
 
-The library also has a basic network definition, VanillaNet, to which we only need to specify number and size of hidden layer, input and output sizes, and last activation function. It uses ReLU everywhere else by default.
+The library also has a basic network definition, FullyConnected, to which we only need to specify number and size of hidden layer, input and output sizes, and last activation function. It uses ReLU everywhere else by default.
 
 let's create the basic objects 
 
@@ -73,7 +73,7 @@ dqn_scheduler = DQNScheduler(
 	steps_per_update = lambda t: 1) #constant
 
 agent_lr = 0.5 #initial learning rate
-agent_model = VanillaNet([60],4,2,None)
+agent_model = FullyConnected([60],4,2,None)
 agent_opt = optim.SGD(agent_model.parameters(),lr=agent_lr,weight_decay = 0, momentum = 0)
 
 agent = Agent(agent_model,agent_opt)

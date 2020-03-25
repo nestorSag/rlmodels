@@ -6,7 +6,13 @@ verify_ssl = true
 [dev-packages]
 
 [packages]
-pdoc3 = "*"
+numpy = "*"
+"pdoc3" = "*"
+build = "*"
+pandas = "*"
+matplotlib = "*"
+torch = "*"
+seaborn = "*"
 
 [requires]
 python_version = "3.6"

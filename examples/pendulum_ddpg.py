@@ -4,7 +4,7 @@ import torch.optim as optim
 import gym
 
 from rlmodels.models.DDPG import *
-from rlmodels.nets import VanillaNet
+from rlmodels.nets import FullyConnected
 
 import logging
 
@@ -46,14 +46,14 @@ ddpg_scheduler = DDPGScheduler(
 #reducing step size of critic helps a lot to avoid catastrophic forgetting!
 
 # create agent models
-actor_model = VanillaNet([250,10],input_dim,output_dim,actor_output)
+actor_model = FullyConnected([250,10],input_dim,output_dim,actor_output)
 actor_opt = optim.SGD(actor_model.parameters(),lr=actor_lr,weight_decay = 0, momentum = 0)
 
 actor = Agent(
   model = actor_model,
   opt = actor_opt)
 
-critic_model = VanillaNet([250,10],input_dim+output_dim,1,None)
+critic_model = FullyConnected([250,10],input_dim+output_dim,1,None)
 critic_opt = optim.SGD(critic_model.parameters(),lr=critic_lr,weight_decay = 0, momentum = 0)
 
 critic = Agent(

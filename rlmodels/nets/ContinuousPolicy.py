@@ -4,9 +4,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.distributions.normal as normal
-from .VanillaNet import VanillaNet
+from .FullyConnected import FullyConnected
 
-class ContinuousPolicy(VanillaNet):
+class ContinuousPolicy(FullyConnected):
   """ continuous policy network where each action component is normally distributed with no correlation between components.
   Hidden layers have ReLU activation by default. The `forward` method returns a `torch.distributions.normal.Normal` instance.
   

@@ -9,7 +9,7 @@ import torch.optim as optim
 
 import itertools
 
-class VanillaNet(nn.Module):
+class FullyConnected(nn.Module):
   """neural network with variable number and size of hidden layers. Uses ReLu for all of them and an allows specifying the activation function type of the output layer 
   
   **Parameters**: 
@@ -27,7 +27,7 @@ class VanillaNet(nn.Module):
 
   def __init__(self,layer_sizes,input_size,output_size,final_activation):
 
-    super(VanillaNet,self).__init__()
+    super(FullyConnected,self).__init__()
     self.n_hidden_layers = len(layer_sizes)
     layers = [input_size] + layer_sizes + [output_size]
     for layer in range(len(layers)-1):

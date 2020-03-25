@@ -4,7 +4,7 @@ import torch.optim as optim
 import gym
 
 from rlmodels.models.CMAES import *
-from rlmodels.nets import VanillaNet
+from rlmodels.nets import FullyConnected
 
 import logging
 
@@ -22,7 +22,7 @@ def binary_output(x):
   return np.argmax(x.detach().numpy())
 
 #CMAES is not gradient-based, so we don't have to wrap the model in an Agent instance
-agent = VanillaNet([6,6],4,2,binary_output)
+agent = FullyConnected([6,6],4,2,binary_output)
 
 # set hyperparameter runtime schedule as a function of the global number of timesteps
 # set them to constants for this example
