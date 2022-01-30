@@ -14,7 +14,7 @@ logging.basicConfig(level=logging.INFO,format=FORMAT,filename="model_fit.log",fi
 
 # env parameters
 max_ep_ts = 200
-env = gym.make('Pendulum-v0')
+env = gym.make('Pendulum-v1')
 env._max_episode_steps = max_ep_ts
 
 #reproducibility parameters
@@ -64,9 +64,9 @@ critic = Agent(
 ddpg = DDPG(actor,critic,env,ddpg_scheduler)
 
 ddpg.fit(
-	n_episodes=70,
+	n_episodes=100,
 	max_ts_by_episode=max_ep_ts,
-	max_memory_size=3000,
+	max_memory_size=1500,
 	render=False,
 	td_steps=10)
 

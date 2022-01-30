@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import torch
 import torch.autograd as autograd
@@ -171,6 +172,8 @@ class DDPG(object):
     sqrt_sample_weights = (sample_weights**0.5).view(-1,1) # importance sampling weights
     #process batch
     S1 = torch.from_numpy(np.array([x[0] for x in batch])).float()
+    #z = np.array([x[1] for x in batch])
+    #print(batch[0])
     A1 = torch.from_numpy(np.array([x[1] for x in batch])).float().view(-1,1)
     R = torch.from_numpy(np.array([x[2] for x in batch])).float()
     S2 = torch.from_numpy(np.array([x[3] for x in batch])).float()
@@ -218,7 +221,7 @@ class DDPG(object):
       #eps = torch.from_numpy(np.random.normal(0,exploration_sdev,self.action_dim)).float()
       eps = torch.from_numpy(self.noise_process.sample()).float()
       a = actor.forward(s1) + eps
-      a = torch.min(torch.max(a,self.action_low),self.action_high) #clip action
+      a = torch.min(torch.max(a,self.action_low),self.action_high).numpy() #clip action
 
     sarst = (s1,a) #t = termination
 
@@ -322,7 +325,7 @@ class DDPG(object):
 
     # fit agents
     logging.info("Training...")
-    for i in range(n_episodes):
+    for i in tqdm(range(n_episodes)):
           
       s1 = self.env.reset()
       self.noise_process.reset()

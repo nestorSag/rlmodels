@@ -1,18 +1,14 @@
 [[source]]
-name = "pypi"
-url = "https://pypi.org/simple"
+url = "https://pypi.python.org/simple"
 verify_ssl = true
+name = "pypi"
+
+[packages]
+gym = "*"
+pyglet = "*"
+pdoc3 = "*"
 
 [dev-packages]
 
-[packages]
-numpy = "*"
-"pdoc3" = "*"
-build = "*"
-pandas = "*"
-matplotlib = "*"
-torch = "*"
-seaborn = "*"
-
 [requires]
-python_version = "3.6"
+python_version = "3.8"

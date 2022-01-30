@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -234,7 +235,7 @@ class AC(object):
     # fit agents
     logging.info("Training...")
 
-    for i in range(n_episodes):
+    for i in tqdm(range(n_episodes)):
 
       ts_reward = 0
 

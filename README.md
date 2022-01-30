@@ -15,7 +15,7 @@ It works with Pytorch models and environment classes like the OpenAI gym ones. A
 
 ### Prerequisites
 
-The project uses ```python 3.6``` and ```torch 1.1.0```.
+The project uses ```python >= 3.6```,  ```torch 1.1.0``` and relies on OpenAI's ```gym``` environments.
 
 ### Installing
 

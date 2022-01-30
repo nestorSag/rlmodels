@@ -25,8 +25,10 @@ setuptools.setup(
         'numpy',
         'pandas',
         'matplotlib',
-        'seaborn'
-
+        'seaborn',
+        'gym',
+        'pyglet',
+        'tqdm'
     ],
 
      long_description=long_description,

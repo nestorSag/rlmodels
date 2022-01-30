@@ -1,5 +1,6 @@
 import random
 import numpy as np
+from tqdm import tqdm
 
 import torch
 import torch.nn as nn
@@ -175,7 +176,6 @@ class CMAES(object):
 
   def fit(self,
       weight_func=None,
-      reward_objective = None,
       n_generations=100,
       individuals_by_gen=20,
       episodes_by_ind=10,
@@ -187,8 +187,6 @@ class CMAES(object):
     **Parameters**:
     
     *weight_func* (*function*): function that maps individual ranked (lowest to highest) performances to (normalised to sum 1) recombination weights. It has to work on *numpy* arrays; defaults to quadratic function
-
-    *reward_objective* (*float*): stop when max episodic reward passes this threshold. Defaults to *None*
 
     *n_generations* (*int*): maximum number of generations to run. Defaults to 100
 
@@ -214,6 +212,7 @@ class CMAES(object):
     scheduler = self.scheduler
 
     if weight_func is None:
+      # default to quadratic rank as fitness
       def weight_func(ranks):
         return ranks**2
 
@@ -225,10 +224,9 @@ class CMAES(object):
       
     # evaluate population
     i = 0
-    reward_objective = np.Inf if reward_objective is None else reward_objective
     best = -np.Inf
 
-    while i < n_generations and best < reward_objective:
+    for i in tqdm(range(n_generations)):
 
       for l in range(len(population)):
         # set up nn agent
@@ -289,7 +287,6 @@ class CMAES(object):
       self.agent.load_state_dict(population[np.argmax(norm_weights)]["architecture"])
 
       population = self._create_population(individuals_by_gen)
-      i += 1
       best = np.max(population_rewards) # best avg episodic reward 
 
       scheduler._step()

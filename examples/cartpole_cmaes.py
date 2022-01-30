@@ -43,7 +43,6 @@ def wf(ranks):
   return ranks**4
 
 cmaes.fit(weight_func=wf,
-      reward_objective = None,
       n_generations=30,
       individuals_by_gen=15,
       episodes_by_ind=15,
